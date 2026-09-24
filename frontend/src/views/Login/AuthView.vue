@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import { register } from '../../apis/auth'
 
 type AuthMode = 'login' | 'register'
 const mode = ref<AuthMode>('login')
@@ -27,7 +28,20 @@ function switchMode(nextMode: AuthMode) { mode.value = nextMode; formRef.value?.
 async function submit() {
   if (!formRef.value) return
   const valid = await formRef.value.validate().catch(() => false)
-  if (valid) ElMessage.success(mode.value === 'login' ? '登录表单校验通过（接口待接入）' : '注册表单校验通过（接口待接入）')
+  if (!valid) return
+
+  if (mode.value === 'login') {
+    ElMessage.info('登录接口待接入')
+    return
+  }
+
+  try {
+    await register({ username: form.username.trim(), password: form.password })
+    ElMessage.success('注册成功，请登录')
+    switchMode('login')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '注册失败，请稍后重试')
+  }
 }
 </script>
 
