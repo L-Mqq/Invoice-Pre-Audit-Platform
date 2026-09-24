@@ -56,7 +56,7 @@ async function submit() {
       const response = await login({ username: form.username.trim(), password: form.password })
       authStore.login(response.data.token, response.data.user)
       ElMessage.success('登录成功')
-      await router.push('/layout')
+      await router.replace('/layout')
     } catch (error) {
       ElMessage.error(error instanceof Error ? error.message : '登录失败，请稍后重试')
     }
