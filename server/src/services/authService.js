@@ -1,4 +1,5 @@
 const bcrypt = require('bcryptjs')
+const jwt = require('jsonwebtoken')
 const userRepository = require('../repositories/userRepository')
 
 // 错误状态码
@@ -47,5 +48,24 @@ async function register({ username, password }) {
     throw error
   }
 }
+// 登录
+async function login({ username, password }) {
+  if (typeof username !== 'string' || !username.trim() || typeof password !== 'string' || !password) {
+    throw createHttpError(400, '请输入用户名和密码')
+  }
+  const user = await userRepository.findByUsername(username.trim())
+  const validPassword = user ? await bcrypt.compare(password, user.password_hash) : false
+  if (!user || !validPassword) throw createHttpError(401, '用户名或密码错误')
+  if (!user.is_active) throw createHttpError(403, '账号已被禁用')
 
-module.exports = { register }
+  const jwtSecret = process.env.JWT_SECRET
+  if (!jwtSecret) throw new Error('JWT_SECRET is not configured')
+  const token = jwt.sign(
+    { sub: String(user.id), username: user.username, role: user.role },
+    jwtSecret,
+    { expiresIn: process.env.JWT_EXPIRES_IN || '2h' },
+  )
+  return { token, user: { id: user.id, username: user.username, role: user.role } }
+}
+
+module.exports = { register, login }

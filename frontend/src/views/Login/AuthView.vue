@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
-import { register } from '../../apis/auth'
+import { login, register } from '../../apis/auth'
+import { useAuthStore } from '../../stores/auth'
 
 type AuthMode = 'login' | 'register'
 const mode = ref<AuthMode>('login')
 const formRef = ref<FormInstance>()
 const form = reactive({ username: '', password: '', confirmPassword: '' })
+const authStore = useAuthStore()
+const router = useRouter()
 
 const validateConfirmPassword = (_rule: unknown, value: string, callback: (error?: Error) => void) => {
   if (mode.value === 'register' && value !== form.password) {
@@ -25,7 +29,7 @@ const rules: FormRules = {
 
 function switchMode(nextMode: AuthMode) { mode.value = nextMode; formRef.value?.resetFields() }
 
-async function submit() {
+async function submitLegacy() {
   if (!formRef.value) return
   const valid = await formRef.value.validate().catch(() => false)
   if (!valid) return
@@ -35,6 +39,29 @@ async function submit() {
     return
   }
 
+  try {
+    await register({ username: form.username.trim(), password: form.password })
+    ElMessage.success('注册成功，请登录')
+    switchMode('login')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '注册失败，请稍后重试')
+  }
+}
+async function submit() {
+  if (!formRef.value) return
+  const valid = await formRef.value.validate().catch(() => false)
+  if (!valid) return
+  if (mode.value === 'login') {
+    try {
+      const response = await login({ username: form.username.trim(), password: form.password })
+      authStore.login(response.data.token, response.data.user)
+      ElMessage.success('登录成功')
+      await router.push('/layout')
+    } catch (error) {
+      ElMessage.error(error instanceof Error ? error.message : '登录失败，请稍后重试')
+    }
+    return
+  }
   try {
     await register({ username: form.username.trim(), password: form.password })
     ElMessage.success('注册成功，请登录')
