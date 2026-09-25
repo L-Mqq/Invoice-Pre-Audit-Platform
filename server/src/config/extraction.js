@@ -13,6 +13,7 @@ function getExtractionConfig() {
       enablePdf: envValue('TENCENTCLOUD_OCR_ENABLE_PDF') !== 'false',
       enableMultiplePage: envValue('TENCENTCLOUD_OCR_ENABLE_MULTIPLE_PAGE') !== 'false',
       enableOther: envValue('TENCENTCLOUD_OCR_ENABLE_OTHER') !== 'false',
+      maxPages: Number(envValue('TENCENTCLOUD_OCR_MAX_PAGES') || 30),
       maxBase64Size: Number(envValue('TENCENTCLOUD_OCR_MAX_BASE64_SIZE') || 10 * 1024 * 1024),
       rateLimitPerSecond: Number(envValue('TENCENTCLOUD_OCR_RATE_LIMIT') || 5),
       maxRetries: Number(envValue('TENCENTCLOUD_OCR_MAX_RETRIES') || 3),

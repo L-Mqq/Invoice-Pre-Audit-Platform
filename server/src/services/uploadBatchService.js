@@ -5,9 +5,10 @@ const path = require('node:path')
 const { pool } = require('../config/database')
 const uploadBatchRepository = require('../repositories/uploadBatchRepository')
 const invoiceFileRepository = require('../repositories/invoiceFileRepository')
-const { extractText } = require('../extractors/pdfTextExtractor')
+const { inspectPdf } = require('../extractors/pdfTextExtractor')
 const { recognizeGeneralInvoice } = require('../extractors/tencentOcrExtractor')
 const { structureInvoiceText } = require('../extractors/agnesInvoiceParser')
+const { getExtractionConfig } = require('../config/extraction')
 
 function badRequest(message) {
   const error = new Error(message)
@@ -105,14 +106,26 @@ async function getUploadBatch(batchId) {
 }
 
 async function processFile(file) {
-  let text = await extractText(file.buffer)
+  const { text: extractedText, pageCount } = await inspectPdf(file.buffer)
+  let text = extractedText
   let ocrResult = null
   if (!text) {
+    const maxPages = getExtractionConfig().tencent.maxPages
+    if (!Number.isInteger(pageCount) || pageCount < 1) {
+      const error = new Error('无法读取 PDF 页数')
+      error.code = 'PDF_PAGE_COUNT_INVALID'
+      throw error
+    }
+    if (pageCount > maxPages) {
+      const error = new Error(`PDF 页数超过 OCR 支持上限（最多 ${maxPages} 页）`)
+      error.code = 'PDF_PAGE_LIMIT_EXCEEDED'
+      throw error
+    }
     ocrResult = await recognizeGeneralInvoice(file.buffer)
     text = ocrResult.text
   }
   const structured = await structureInvoiceText(text)
-  return { text, ocrResult, structured }
+  return { pageCount, text, ocrResult, structured }
 }
 
 module.exports = { createUploadBatch, getUploadBatch, processFile }
