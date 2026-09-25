@@ -29,12 +29,12 @@ function classify(files) {
   return files.length === 1 ? 'pdf' : 'multiple_pdf'
 }
 
-// 生成pdf文件列表
+// 生成pdf文件列表，把文件统一成一个内部结构
 function createPdfItem(buffer, originalName, mimeType = 'application/pdf') {
   return { buffer, originalName, mimeType, fileSize: buffer.length }
 }
 
-// 解压zip
+// 解压 ZIP，找出里面所有 PDF。
 function extractZip(file, batchId) {
   const zip = new AdmZip(file.buffer)
   const entries = zip.getEntries()
@@ -105,6 +105,7 @@ async function getUploadBatch(batchId) {
   return { ...batch, files }
 }
 
+// 逐个处理
 async function processFile(file) {
   const { text: extractedText, pageCount } = await inspectPdf(file.buffer)
   let text = extractedText

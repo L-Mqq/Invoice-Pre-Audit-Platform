@@ -22,7 +22,7 @@
     "multer": "^2.4.0",
     "mysql2": "^3.24.4",
     "openai": "^7.23.0",
-    "pdf-parse": "^2.4.5",
-    "tencentcloud-sdk-nodejs-ocr": "^4.1.317"
+    "tencentcloud-sdk-nodejs-ocr": "^4.1.317",
+    "unpdf": "^1.8.1"
   }
 }

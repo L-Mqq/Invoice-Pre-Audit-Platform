@@ -7,12 +7,14 @@ let requestQueue = Promise.resolve()
 
 function wait(ms) { return new Promise((resolve) => setTimeout(resolve, ms)) }
 
+// 判断是否可重试
 function isRetryable(error) {
   const code = String(error?.code || error?.Code || '')
   const status = Number(error?.statusCode || error?.status || error?.response?.status)
   return status === 429 || status >= 500 || /Limit|RequestLimit|Internal|Timeout|Network|Unavailable/i.test(code)
 }
 
+// 限流队列
 function enqueue(request) {
   const task = requestQueue.then(async () => {
     const { tencent } = getExtractionConfig()
@@ -26,8 +28,16 @@ function enqueue(request) {
   return task
 }
 
+// 建客户端
 function getClient() {
   const { tencent } = getExtractionConfig()
+
+  // 测试
+  console.log('SecretId 长度:', tencent.secretId?.length)
+  console.log('SecretId 前6位:', tencent.secretId?.slice(0, 6))
+  console.log('SecretKey 长度:', tencent.secretKey?.length)
+  console.log('SecretKey 前6位:', tencent.secretKey?.slice(0, 6))
+
   if (!tencent.secretId || !tencent.secretKey) {
     throw new Error('TENCENTCLOUD_SECRET_ID and TENCENTCLOUD_SECRET_KEY are required')
   }
@@ -38,6 +48,7 @@ function getClient() {
   })
 }
 
+// orc识别文本
 async function recognizeGeneralInvoice(buffer) {
   if (!Buffer.isBuffer(buffer) || buffer.length === 0) throw new Error('OCR input file is empty')
   const { tencent } = getExtractionConfig()
