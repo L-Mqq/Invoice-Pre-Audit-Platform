@@ -1,0 +1,3 @@
+# Do not commit uploaded invoices or extracted files.
+*
+!.gitignore
