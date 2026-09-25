@@ -14,6 +14,9 @@ function getExtractionConfig() {
       enableMultiplePage: envValue('TENCENTCLOUD_OCR_ENABLE_MULTIPLE_PAGE') !== 'false',
       enableOther: envValue('TENCENTCLOUD_OCR_ENABLE_OTHER') !== 'false',
       maxBase64Size: Number(envValue('TENCENTCLOUD_OCR_MAX_BASE64_SIZE') || 10 * 1024 * 1024),
+      rateLimitPerSecond: Number(envValue('TENCENTCLOUD_OCR_RATE_LIMIT') || 5),
+      maxRetries: Number(envValue('TENCENTCLOUD_OCR_MAX_RETRIES') || 3),
+      retryBaseDelayMs: Number(envValue('TENCENTCLOUD_OCR_RETRY_BASE_DELAY_MS') || 500),
     },
     agnes: {
       apiKey: envValue('AGNES_API_KEY'),

@@ -2,6 +2,29 @@ const tencentcloud = require('tencentcloud-sdk-nodejs-ocr')
 const { getExtractionConfig } = require('../config/extraction')
 
 const OcrClient = tencentcloud.ocr.v20181119.Client
+let lastRequestAt = 0
+let requestQueue = Promise.resolve()
+
+function wait(ms) { return new Promise((resolve) => setTimeout(resolve, ms)) }
+
+function isRetryable(error) {
+  const code = String(error?.code || error?.Code || '')
+  const status = Number(error?.statusCode || error?.status || error?.response?.status)
+  return status === 429 || status >= 500 || /Limit|RequestLimit|Internal|Timeout|Network|Unavailable/i.test(code)
+}
+
+function enqueue(request) {
+  const task = requestQueue.then(async () => {
+    const { tencent } = getExtractionConfig()
+    const interval = Math.ceil(1000 / Math.max(1, tencent.rateLimitPerSecond))
+    const waitTime = Math.max(0, interval - (Date.now() - lastRequestAt))
+    if (waitTime > 0) await wait(waitTime)
+    lastRequestAt = Date.now()
+    return request()
+  })
+  requestQueue = task.catch(() => {})
+  return task
+}
 
 function getClient() {
   const { tencent } = getExtractionConfig()
@@ -27,15 +50,25 @@ async function recognizeGeneralInvoice(buffer) {
   }
 
   const client = getClient()
-  const response = await client.RecognizeGeneralInvoice({
+  const request = () => client.RecognizeGeneralInvoice({
     ImageBase64: imageBase64,
     EnablePdf: tencent.enablePdf,
     EnableMultiplePage: tencent.enableMultiplePage,
     EnableOther: tencent.enableOther,
   })
+  let response
+  for (let attempt = 0; attempt <= tencent.maxRetries; attempt += 1) {
+    try {
+      response = await enqueue(request)
+      break
+    } catch (error) {
+      if (!isRetryable(error) || attempt === tencent.maxRetries) throw error
+      await wait(tencent.retryBaseDelayMs * (2 ** attempt))
+    }
+  }
   // 高级票据接口返回的是结构化票据信息，转成文本供 Agnes 进一步统一结构化。
   const text = JSON.stringify(response.MixedInvoiceItems || response)
-  return { text, rawResult: response, provider: 'tencent-ocr' }
+  return { text, rawResult: response, requestId: response.RequestId, provider: 'tencent-ocr' }
 }
 
 module.exports = { recognizeGeneralInvoice }
