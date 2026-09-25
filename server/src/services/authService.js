@@ -68,4 +68,10 @@ async function login({ username, password }) {
   return { token, user: { id: user.id, username: user.username, role: user.role } }
 }
 
-module.exports = { register, login }
+async function getCurrentUser(userId) {
+  const user = await userRepository.findById(userId)
+  if (!user || !user.is_active) throw createHttpError(401, '用户不存在或账号已禁用')
+  return { id: user.id, username: user.username, role: user.role }
+}
+
+module.exports = { register, login, getCurrentUser }

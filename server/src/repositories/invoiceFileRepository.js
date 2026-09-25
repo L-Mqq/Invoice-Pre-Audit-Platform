@@ -22,4 +22,12 @@ async function findByBatchId(batchId) {
   return rows
 }
 
-module.exports = { createFile, findByBatchId }
+// 更新提取状态
+async function updateExtractionStatus({ connection = pool, id, status, error = null }) {
+  await connection.execute(
+    'UPDATE invoice_files SET extraction_status = ?, extraction_error = ? WHERE id = ?',
+    [status, error, id],
+  )
+}
+
+module.exports = { createFile, findByBatchId, updateExtractionStatus }

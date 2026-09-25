@@ -13,6 +13,7 @@ async function create(req, res, next) {
   }
 }
 
+// 获取批次的ID
 async function getById(req, res, next) {
   try {
     const batch = await uploadBatchService.getUploadBatch(req.params.batchId)

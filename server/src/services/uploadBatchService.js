@@ -5,6 +5,9 @@ const path = require('node:path')
 const { pool } = require('../config/database')
 const uploadBatchRepository = require('../repositories/uploadBatchRepository')
 const invoiceFileRepository = require('../repositories/invoiceFileRepository')
+const { extractText } = require('../extractors/pdfTextExtractor')
+const { recognizeGeneralInvoice } = require('../extractors/tencentOcrExtractor')
+const { structureInvoiceText } = require('../extractors/agnesInvoiceParser')
 
 function badRequest(message) {
   const error = new Error(message)
@@ -66,7 +69,24 @@ async function createUploadBatch({ files, createdBy = null }) {
 
     await uploadBatchRepository.updateStatus({ connection, id: batchId, status: 'processing' })
     await connection.commit()
-    return { ...batch, status: 'processing', totalCount: pdfFiles.length, files: storedFiles }
+    const results = []
+    for (let index = 0; index < storedFiles.length; index += 1) {
+      const storedFile = storedFiles[index]
+      try {
+        const extraction = await processFile(pdfFiles[index])
+        await invoiceFileRepository.updateExtractionStatus({ id: storedFile.id, status: 'success' })
+        await uploadBatchRepository.incrementResult({ id: batchId, success: true })
+        results.push({ fileId: storedFile.id, status: 'success', extraction })
+      } catch (error) {
+        await invoiceFileRepository.updateExtractionStatus({ id: storedFile.id, status: 'failed', error: error.message })
+        await uploadBatchRepository.incrementResult({ id: batchId, success: false })
+        results.push({ fileId: storedFile.id, status: 'failed', error: error.message })
+      }
+    }
+    const successCount = results.filter((item) => item.status === 'success').length
+    const finalStatus = successCount === 0 ? 'failed' : successCount === results.length ? 'completed' : 'partial_failed'
+    await uploadBatchRepository.updateStatus({ id: batchId, status: finalStatus })
+    return { ...batch, status: finalStatus, totalCount: pdfFiles.length, files: storedFiles, results }
   } catch (error) {
     await connection.rollback()
     await Promise.allSettled(savedPaths.map((filePath) => fs.unlink(filePath)))
@@ -76,6 +96,7 @@ async function createUploadBatch({ files, createdBy = null }) {
   }
 }
 
+// 获取批次信息
 async function getUploadBatch(batchId) {
   const batch = await uploadBatchRepository.findById(batchId)
   if (!batch) { const error = new Error('上传批次不存在'); error.statusCode = 404; error.expose = true; throw error }
@@ -83,4 +104,15 @@ async function getUploadBatch(batchId) {
   return { ...batch, files }
 }
 
-module.exports = { createUploadBatch, getUploadBatch }
+async function processFile(file) {
+  let text = await extractText(file.buffer)
+  let ocrResult = null
+  if (!text) {
+    ocrResult = await recognizeGeneralInvoice(file.buffer)
+    text = ocrResult.text
+  }
+  const structured = await structureInvoiceText(text)
+  return { text, ocrResult, structured }
+}
+
+module.exports = { createUploadBatch, getUploadBatch, processFile }

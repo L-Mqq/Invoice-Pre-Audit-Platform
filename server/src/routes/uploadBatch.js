@@ -1,8 +1,10 @@
 const express = require('express')
 const multer = require('multer')
 const uploadBatchController = require('../controllers/uploadBatchController')
+const authMiddleware = require('../middlewares/auth')
 
 const router = express.Router()
+router.use(authMiddleware)
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { files: 50, fileSize: 20 * 1024 * 1024 },

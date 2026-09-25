@@ -8,6 +8,14 @@ async function findByUsername(username) {
   return rows[0] || null
 }
 
+async function findById(id) {
+  const [rows] = await pool.execute(
+    'SELECT id, username, role, is_active, created_at, updated_at FROM users WHERE id = ? LIMIT 1',
+    [id],
+  )
+  return rows[0] || null
+}
+
 async function createUser({ username, passwordHash, role = 'admin' }) {
   const [result] = await pool.execute(
     'INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)',
@@ -21,4 +29,4 @@ async function createUser({ username, passwordHash, role = 'admin' }) {
   }
 }
 
-module.exports = { findByUsername, createUser }
+module.exports = { findByUsername, findById, createUser }
