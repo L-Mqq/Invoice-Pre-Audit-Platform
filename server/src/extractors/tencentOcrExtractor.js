@@ -44,38 +44,27 @@ function getClient() {
   })
 }
 
-function normalizeFieldName(value) {
-  return String(value || '').replace(/[\s:：]/g, '')
-}
-
-function firstField(fields, aliases) {
-  const aliasSet = new Set(aliases.map(normalizeFieldName))
-  return fields.find((field) => aliasSet.has(normalizeFieldName(field.name)))?.value || null
-}
-
-// 将腾讯混贴发票的通用字段名映射为项目统一字段，避免直接把供应商 JSON 当作 OCR 原文交给 Agnes。
+// 按 SubType 提取腾讯 OCR 的票种结构化对象，交给 Agnes 统一输出项目 Schema。
 function normalizeMixedInvoiceItems(items) {
   if (!Array.isArray(items)) return []
 
   return items.map((item) => {
-    const fields = (Array.isArray(item.SingleInvoiceInfos) ? item.SingleInvoiceInfos : [])
+    const singleInvoiceInfos = item.SingleInvoiceInfos
+    const subType = item.SubType || null
+    const subtypeResult = subType && singleInvoiceInfos && !Array.isArray(singleInvoiceInfos)
+      ? singleInvoiceInfos[subType] ?? null
+      : null
+    const fields = (Array.isArray(singleInvoiceInfos) ? singleInvoiceInfos : [])
       .filter((field) => field && field.Value != null)
       .map((field) => ({ name: field.Name || '', value: String(field.Value), row: field.Row ?? -1 }))
 
     return {
       page: item.Page ?? null,
       invoiceType: item.Type ?? null,
-      invoiceNumber: firstField(fields, ['发票号码', '发票号', '数电号码']),
-      invoiceDate: firstField(fields, ['开票日期', '日期']),
-      sellerName: firstField(fields, ['销售方名称', '销售方']),
-      sellerTaxId: firstField(fields, ['销售方纳税人识别号', '销售方税号']),
-      buyerName: firstField(fields, ['购买方名称', '购买方']),
-      buyerTaxId: firstField(fields, ['购买方纳税人识别号', '购买方税号']),
-      totalAmount: firstField(fields, ['价税合计小写', '价税合计', '合计金额']),
-      taxAmount: firstField(fields, ['合计税额', '税额']),
-      amountWithoutTax: firstField(fields, ['不含税金额', '税前金额']),
-      items: [],
-      sourceFields: fields,
+      subType,
+      subTypeDescription: item.SubTypeDescription ?? null,
+      data: subtypeResult,
+      fields,
     }
   })
 }
@@ -103,7 +92,7 @@ async function recognizeGeneralInvoice(buffer) {
   for (let attempt = 0; attempt <= tencent.maxRetries; attempt += 1) {
     try {
       response = await enqueue(request)
-    
+      console.log(response);
       
       break
     } catch (error) {

@@ -36,11 +36,17 @@ function createPdfItem(buffer, originalName, mimeType = 'application/pdf') {
 
 // 解压 ZIP，找出里面所有 PDF。
 function extractZip(file, batchId) {
-  const zip = new AdmZip(file.buffer)
-  const entries = zip.getEntries()
-  const pdfEntries = entries.filter((entry) => !entry.isDirectory && path.extname(entry.entryName).toLowerCase() === '.pdf')
-  if (pdfEntries.length === 0) throw badRequest('ZIP 中未找到 PDF 文件')
-  return pdfEntries.map((entry) => createPdfItem(entry.getData(), path.basename(entry.entryName)))
+  try {
+    const zip = new AdmZip(file.buffer)
+    const entries = zip.getEntries()
+    const pdfEntries = entries.filter((entry) => !entry.isDirectory && path.extname(entry.entryName).toLowerCase() === '.pdf')
+    if (pdfEntries.length === 0) throw badRequest('ZIP 中未找到 PDF 文件')
+    return pdfEntries.map((entry) => createPdfItem(entry.getData(), path.basename(entry.entryName)))
+  } catch (error) {
+    // 保留业务校验错误，其他 AdmZip/解压异常统一转换为客户端可理解的 400。
+    if (error.statusCode === 400 && error.expose) throw error
+    throw badRequest('ZIP 文件损坏或格式无效')
+  }
 }
 
 // 创建上传批次
