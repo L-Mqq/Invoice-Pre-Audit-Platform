@@ -10,6 +10,7 @@ const { testConnection, closePool } = require('./src/config/database')
 const errorHandler = require('./src/middlewares/errorHandler')
 const authRouter = require('./src/routes/auth')
 const uploadBatchRouter = require('./src/routes/uploadBatch')
+const invoiceReviewRouter = require('./src/routes/invoiceReview')
 
 const app = express()
 const apiRouter = express.Router()
@@ -36,6 +37,7 @@ apiRouter.get('/health', async (req, res, next) => {
 
 apiRouter.use('/auth', authRouter)
 apiRouter.use('/upload-batches', uploadBatchRouter)
+apiRouter.use('/invoice-review', invoiceReviewRouter)
 
 // 业务路由统一挂载在 /api 下，后续可继续拆分到 src/routes。
 app.use('/api', apiRouter)

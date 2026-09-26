@@ -40,14 +40,27 @@ async function updateExtractionResult({ connection = pool, id, data, rawResult, 
 
 // 创建关联商品
 async function createItems({ connection = pool, invoiceId, items }) {
+  const createdItems = []
   for (const item of items) {
-    await connection.execute(
+    const [result] = await connection.execute(
       `INSERT INTO invoice_items
         (invoice_id, item_name, quantity, unit_price, line_amount)
        VALUES (?, ?, ?, ?, ?)`,
       [invoiceId, item.itemName, Number(item.quantity), Number(item.unitPrice), Number(item.amount)],
     )
+    createdItems.push({ id: result.insertId, ...item })
   }
+  return createdItems
+}
+
+async function updateQualificationByCategory({ connection = pool, id, categoryResult, reason }) {
+  if (categoryResult === '可以') return
+  await connection.execute(
+    `UPDATE invoices
+        SET qualification_status = 'pending_manual', qualification_reason = ?
+      WHERE id = ?`,
+    [reason, id],
+  )
 }
 
 // 校验失败转人工
@@ -58,4 +71,4 @@ async function markExtractionFailure({ connection = pool, id, error }) {
   )
 }
 
-module.exports = { createDraft, updateExtractionResult, createItems, markExtractionFailure }
+module.exports = { createDraft, updateExtractionResult, createItems, updateQualificationByCategory, markExtractionFailure }

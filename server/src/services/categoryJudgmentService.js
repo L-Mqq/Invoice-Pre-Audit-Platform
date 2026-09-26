@@ -17,11 +17,15 @@ function findRule(itemName, rules) {
 async function judgeItem({ item, rules }) {
   const matchedRule = findRule(item.itemName, rules)
   if (matchedRule) {
-    return { itemId: item.id, categoryResult: matchedRule.categoryResult, aiResult: null, matchedRule, reason: `命中品类规则：${matchedRule.ruleName}（关键词：${matchedRule.keyword}）`, source: 'rule' }
+    return { itemId: item.id, itemName: item.itemName, categoryResult: matchedRule.categoryResult, aiResult: null, matchedRule, reason: `命中品类规则：${matchedRule.ruleName}（关键词：${matchedRule.keyword}）`, source: 'rule' }
   }
-  const ai = await classifyItem({ itemName: item.itemName, rules })
-  const categoryResult = validateCategoryResult(ai.categoryResult) ? ai.categoryResult : '存疑'
-  return { itemId: item.id, categoryResult, aiResult: categoryResult, matchedRule: null, reason: ai.reason || 'AI 判断', source: 'ai', rawResult: ai.rawResult }
+  try {
+    const ai = await classifyItem({ itemName: item.itemName, rules })
+    const categoryResult = validateCategoryResult(ai.categoryResult) ? ai.categoryResult : '存疑'
+    return { itemId: item.id, itemName: item.itemName, categoryResult, aiResult: categoryResult, matchedRule: null, reason: ai.reason || 'AI 判断', source: 'ai', rawResult: ai.rawResult }
+  } catch (error) {
+    return { itemId: item.id, itemName: item.itemName, categoryResult: '存疑', aiResult: '存疑', matchedRule: null, reason: `AI 无法可靠判断：${error.message}`, source: 'manual' }
+  }
 }
 
 // 判断整张发票所有商品的品类，并汇总结论。
@@ -35,7 +39,12 @@ async function judgeItems({ items, connection, persist = false }) {
   }
   const hasRejected = results.some((item) => item.categoryResult === '不可以')
   const hasUncertain = results.some((item) => item.categoryResult === '存疑')
-  return { results, invoiceCategoryResult: hasRejected ? '不可以' : hasUncertain ? '存疑' : '可以', requiresManualReview: hasRejected || hasUncertain }
+  return {
+    results,
+    invoiceCategoryResult: hasRejected ? '不可以' : hasUncertain ? '存疑' : '可以',
+    requiresManualReview: hasRejected || hasUncertain,
+    reason: results.filter((item) => item.categoryResult !== '可以').map((item) => `${item.itemName || item.itemId}：${item.reason}`).join('；') || '所有商品均通过品类判断',
+  }
 }
 
 module.exports = { normalizeText, findRule, judgeItem, judgeItems }

@@ -10,6 +10,7 @@ const { inspectPdf } = require('../extractors/pdfTextExtractor')
 const { recognizeGeneralInvoice } = require('../extractors/tencentOcrExtractor')
 const { structureInvoiceText } = require('../extractors/agnesInvoiceParser')
 const { validateInvoiceExtraction } = require('../validators/invoiceExtractionValidator')
+const { judgeItems } = require('./categoryJudgmentService')
 const { getExtractionConfig } = require('../config/extraction')
 
 function badRequest(message) {
@@ -96,10 +97,17 @@ async function createUploadBatch({ files, createdBy = null }) {
             errors: extraction.validation.errors,
           })
           if (extraction.validation.valid) {
-            await invoiceRepository.createItems({
+            const createdItems = await invoiceRepository.createItems({
               connection: resultConnection,
               invoiceId: storedFile.invoiceId,
               items: extraction.validation.data.items,
+            })
+            const categoryJudgment = await judgeItems({ connection: resultConnection, items: createdItems, persist: true })
+            await invoiceRepository.updateQualificationByCategory({
+              connection: resultConnection,
+              id: storedFile.invoiceId,
+              categoryResult: categoryJudgment.invoiceCategoryResult,
+              reason: categoryJudgment.reason,
             })
           }
           await invoiceFileRepository.updateExtractionStatus({ connection: resultConnection, id: storedFile.id, status: 'success' })

@@ -6,7 +6,7 @@ async function findActiveRules({ connection = pool } = {}) {
             priority, is_active AS isActive
        FROM category_rules
       WHERE is_active = TRUE
-      ORDER BY priority ASC, id ASC`,
+      ORDER BY id ASC`,
   )
   return rows
 }
