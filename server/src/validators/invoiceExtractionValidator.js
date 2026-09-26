@@ -78,7 +78,7 @@ function validateInvoiceExtraction(input) {
         errors.push(createError('items', 'TYPE', '商品明细必须是对象', index))
         return
       }
-      for (const field of ['itemName', 'quantity', 'unitPrice', 'amount']) {
+      for (const field of ['name', 'quantity', 'unitPrice', 'amount']) {
         if (isBlank(item[field])) errors.push(createError(`items.${field}`, 'REQUIRED', `商品${field}不能为空`, index))
       }
       for (const field of ['quantity', 'unitPrice', 'amount']) {
