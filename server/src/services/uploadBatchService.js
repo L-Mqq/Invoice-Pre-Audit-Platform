@@ -5,6 +5,7 @@ const path = require('node:path')
 const { pool } = require('../config/database')
 const uploadBatchRepository = require('../repositories/uploadBatchRepository')
 const invoiceFileRepository = require('../repositories/invoiceFileRepository')
+const invoiceRepository = require('../repositories/invoiceRepository')
 const { inspectPdf } = require('../extractors/pdfTextExtractor')
 const { recognizeGeneralInvoice } = require('../extractors/tencentOcrExtractor')
 const { structureInvoiceText } = require('../extractors/agnesInvoiceParser')
@@ -72,7 +73,8 @@ async function createUploadBatch({ files, createdBy = null }) {
       const absolutePath = path.join(storageDirectory, safeName)
       await fs.writeFile(absolutePath, file.buffer)
       savedPaths.push(absolutePath)
-      storedFiles.push(await invoiceFileRepository.createFile({ connection, batchId, originalName: file.originalName, storageKey: path.posix.join(batchId, safeName), mimeType: file.mimeType, fileSize: file.fileSize, sha256 }))
+      const invoice = await invoiceRepository.createDraft({ connection, sourceBatchId: batchId, createdBy })
+      storedFiles.push(await invoiceFileRepository.createFile({ connection, batchId, invoiceId: invoice.id, originalName: file.originalName, storageKey: path.posix.join(batchId, safeName), mimeType: file.mimeType, fileSize: file.fileSize, sha256 }))
     }
 
     await uploadBatchRepository.updateStatus({ connection, id: batchId, status: 'processing' })
@@ -82,11 +84,47 @@ async function createUploadBatch({ files, createdBy = null }) {
       const storedFile = storedFiles[index]
       try {
         const extraction = await processFile(pdfFiles[index])
-        await invoiceFileRepository.updateExtractionStatus({ id: storedFile.id, status: 'success' })
+        const resultConnection = await pool.getConnection()
+        try {
+          await resultConnection.beginTransaction()
+          await invoiceRepository.updateExtractionResult({
+            connection: resultConnection,
+            id: storedFile.invoiceId,
+            data: extraction.structured.data,
+            rawResult: extraction.structured.rawResult,
+            valid: extraction.validation.valid,
+            errors: extraction.validation.errors,
+          })
+          if (extraction.validation.valid) {
+            await invoiceRepository.createItems({
+              connection: resultConnection,
+              invoiceId: storedFile.invoiceId,
+              items: extraction.validation.data.items,
+            })
+          }
+          await invoiceFileRepository.updateExtractionStatus({ connection: resultConnection, id: storedFile.id, status: 'success' })
+          await resultConnection.commit()
+        } catch (error) {
+          await resultConnection.rollback()
+          throw error
+        } finally {
+          resultConnection.release()
+        }
         await uploadBatchRepository.incrementResult({ id: batchId, success: true })
         results.push({ fileId: storedFile.id, status: 'success', extraction })
       } catch (error) {
-        await invoiceFileRepository.updateExtractionStatus({ id: storedFile.id, status: 'failed', error: error.message })
+        const resultConnection = await pool.getConnection()
+        try {
+          await resultConnection.beginTransaction()
+          await invoiceFileRepository.updateExtractionStatus({ connection: resultConnection, id: storedFile.id, status: 'failed', error: error.message })
+          await invoiceRepository.markExtractionFailure({ connection: resultConnection, id: storedFile.invoiceId, error: error.message })
+          await resultConnection.commit()
+        } catch (updateError) {
+          await resultConnection.rollback()
+          throw updateError
+        } finally {
+          resultConnection.release()
+        }
         await uploadBatchRepository.incrementResult({ id: batchId, success: false })
         results.push({ fileId: storedFile.id, status: 'failed', error: error.message })
       }

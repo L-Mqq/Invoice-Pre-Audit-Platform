@@ -11,7 +11,55 @@ const invoiceSchema = {
   totalAmount: null,   //总计
   taxAmount: null,    //税额总计
   amountWithoutTax: null,  //不包括税额的价格总计
-  items: [],           //包含的商品
+  items: [
+    {
+      itemName: null,
+      quantity: null,
+      unitPrice: null,
+      amount: null,
+    },
+  ],
+}
+
+function firstValue(source, names) {
+  for (const name of names) {
+    if (source?.[name] !== undefined && source[name] !== null && source[name] !== '') return source[name]
+  }
+  return null
+}
+
+function normalizeItem(item) {
+  const source = item && typeof item === 'object' ? item : {}
+  return {
+    itemName: firstValue(source, ['itemName', 'name', 'Name', '商品名称', '项目名称']),
+    quantity: firstValue(source, ['quantity', 'Quantity', '数量']),
+    unitPrice: firstValue(source, ['unitPrice', 'UnitPrice','Price', '单价']),
+    amount: firstValue(source, ['amount', 'Amount', 'AmountWithoutTax','Total', '金额', '不含税金额']),
+  }
+}
+
+function normalizeStructuredResult(result) {
+  const source = result && typeof result === 'object' ? result : {}
+  const items = Array.isArray(source.items)
+    ? source.items.map(normalizeItem)
+    : Array.isArray(source.VatElectronicItems)
+      ? source.VatElectronicItems.map(normalizeItem)
+      : Array.isArray(source.VatInvoiceItems)
+        ? source.VatInvoiceItems.map(normalizeItem)
+        : []
+
+  return {
+    invoiceNumber: firstValue(source, ['invoiceNumber', 'InvoiceNumber', 'Number', '发票号码', '数电号码']),
+    invoiceDate: firstValue(source, ['invoiceDate', 'InvoiceDate', 'Date', '开票日期']),
+    sellerName: firstValue(source, ['sellerName', 'SellerName', 'Seller', '销售方名称']),
+    sellerTaxId: firstValue(source, ['sellerTaxId', 'SellerTaxId', 'SellerTaxID', '销售方纳税人识别号']),
+    buyerName: firstValue(source, ['buyerName', 'BuyerName', 'Buyer', '购买方名称']),
+    buyerTaxId: firstValue(source, ['buyerTaxId', 'BuyerTaxId', 'BuyerTaxID', '购买方纳税人识别号']),
+    totalAmount: firstValue(source, ['totalAmount', 'TotalAmount', 'Total', '价税合计']),
+    taxAmount: firstValue(source, ['taxAmount', 'TaxAmount', 'Tax', '税额']),
+    amountWithoutTax: firstValue(source, ['amountWithoutTax', 'AmountWithoutTax', 'PretaxAmount', '不含税金额']),
+    items,
+  }
 }
 
 function getClient() {
@@ -51,7 +99,7 @@ console.log('AI 输入前 500 字:', text.slice(0, 500))
   } catch { 
     throw new Error('Agnes returned invalid JSON') 
   }
-  return { data: { ...invoiceSchema, ...result, items: Array.isArray(result.items) ? result.items : [] }, rawResult: response, provider: 'agnes-2.5-flash' }
+  return { data: normalizeStructuredResult(result), rawResult: response, provider: 'agnes-2.5-flash' }
 }
 
-module.exports = { structureInvoiceText }
+module.exports = { structureInvoiceText, normalizeStructuredResult }

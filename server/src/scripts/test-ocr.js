@@ -3,10 +3,12 @@ const fs = require('node:fs/promises')
 require('dotenv').config({ path: path.resolve(__dirname, '../../.env') })
 
 const { recognizeGeneralInvoice } = require('../extractors/tencentOcrExtractor')
+const { structureInvoiceText } = require('../extractors/agnesInvoiceParser')
+const { validateInvoiceExtraction } = require('../validators/invoiceExtractionValidator')
 
 const defaultFile = path.resolve(
   __dirname,
-  '../../../storage/6654dfa6-02f8-4883-946c-b81a65305984/c92f1472-ecc6-4a82-b987-35530a257582-test1.pdf',
+  '../../../storage/d6a5e2a8-a4a0-483b-b252-14dca2833514/088ec1cc-ad37-477b-a7fa-fcc8e9b979a0-test1.pdf',
 )
 
 async function main() {
@@ -59,6 +61,16 @@ async function main() {
   })), null, 2)
   console.log('交给 Agnes 的 JSON:')
   console.log(result.text)
+
+  console.log('开始测试 Agnes 结构化...')
+  const structured = await structureInvoiceText(result.text)
+  console.log('Agnes 原始结构化结果:')
+  console.log(JSON.stringify(structured.data, null, 2))
+  console.log('Agnes 商品明细数量:', Array.isArray(structured.data.items) ? structured.data.items.length : 0)
+
+  const validation = validateInvoiceExtraction(structured.data)
+  console.log('结构化校验结果:')
+  console.log(JSON.stringify(validation, null, 2))
 }
 
 main().catch((error) => {
