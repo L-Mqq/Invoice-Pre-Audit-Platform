@@ -103,13 +103,11 @@ async function recognizeGeneralInvoice(buffer) {
   for (let attempt = 0; attempt <= tencent.maxRetries; attempt += 1) {
     try {
       response = await enqueue(request)
-      console.log(response)
+    
       
       break
     } catch (error) {
-      
-       console.log('RequestId:', error.requestId || error.RequestId || error.requestID)
-       console.log('错误信息:', error.message || error)
+    
 
       if (!isRetryable(error) || attempt === tencent.maxRetries) throw error
       await wait(tencent.retryBaseDelayMs * (2 ** attempt))
