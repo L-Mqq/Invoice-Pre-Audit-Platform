@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS invoices (
   total_amount DECIMAL(12, 2) NOT NULL DEFAULT 0.00 COMMENT '价税合计',
   -- 自然周累计只能使用提交审核时间，不能使用 invoice_date。
   submitted_at DATETIME NULL COMMENT '提交审核时间，自然周累计的时间依据',
+  --资质审核的状态：
   -- pending=待审核，pending_voucher=待补凭证，pending_manual=待人工处理，
   -- approved=审核通过，rejected=审核不通过，cancelled=已取消。
   qualification_status ENUM('pending', 'pending_voucher', 'pending_manual', 'approved', 'rejected', 'cancelled') NOT NULL DEFAULT 'pending' COMMENT '资质审核状态',

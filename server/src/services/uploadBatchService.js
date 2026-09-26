@@ -8,6 +8,7 @@ const invoiceFileRepository = require('../repositories/invoiceFileRepository')
 const { inspectPdf } = require('../extractors/pdfTextExtractor')
 const { recognizeGeneralInvoice } = require('../extractors/tencentOcrExtractor')
 const { structureInvoiceText } = require('../extractors/agnesInvoiceParser')
+const { validateInvoiceExtraction } = require('../validators/invoiceExtractionValidator')
 const { getExtractionConfig } = require('../config/extraction')
 
 function badRequest(message) {
@@ -132,7 +133,8 @@ async function processFile(file) {
     text = ocrResult.text
   }
   const structured = await structureInvoiceText(text)
-  return { pageCount, text, ocrResult, structured }
+  const validation = validateInvoiceExtraction(structured.data)
+  return { pageCount, text, ocrResult, structured, validation }
 }
 
 module.exports = { createUploadBatch, getUploadBatch, processFile }
