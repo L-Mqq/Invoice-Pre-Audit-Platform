@@ -15,8 +15,9 @@ export const useUploadBatchStore = defineStore('uploadBatch', () => {
     loading.value = true
     error.value = ''
     try {
-      currentBatch.value = await createUploadBatch(files)
-      localStorage.setItem(LAST_BATCH_ID_KEY, currentBatch.value.id)
+      const createdBatch = await createUploadBatch(files)
+      currentBatch.value = await getUploadBatch(createdBatch.id)
+      localStorage.setItem(LAST_BATCH_ID_KEY, createdBatch.id)
       return currentBatch.value
     } catch (cause) {
       error.value = cause instanceof Error ? cause.message : '发票上传失败'

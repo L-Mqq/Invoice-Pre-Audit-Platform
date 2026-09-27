@@ -62,7 +62,7 @@ export interface UploadBatch {
   successCount: number
   failedCount: number
   files: UploadBatchFile[]
-  results: UploadBatchResult[]
+  results?: UploadBatchResult[]
 }
 
 interface UploadBatchResponse {

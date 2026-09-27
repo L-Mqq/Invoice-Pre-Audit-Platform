@@ -69,6 +69,80 @@ async function findItemsByInvoiceIds(invoiceIds) {
   return rows
 }
 
+async function findPage({
+  page,
+  pageSize,
+  qualificationStatus,
+  financeStatus,
+  reimbursementStatus,
+  sellerName,
+  invoiceNumber,
+}) {
+  const conditions = []
+  const params = []
+  if (qualificationStatus) {
+    conditions.push('i.qualification_status = ?')
+    params.push(qualificationStatus)
+  }
+  if (financeStatus) {
+    conditions.push('i.finance_status = ?')
+    params.push(financeStatus)
+  }
+  if (reimbursementStatus) {
+    conditions.push('i.reimbursement_status = ?')
+    params.push(reimbursementStatus)
+  }
+  if (sellerName) {
+    conditions.push('i.seller_name LIKE ?')
+    params.push(`%${sellerName}%`)
+  }
+  if (invoiceNumber) {
+    conditions.push('i.invoice_number LIKE ?')
+    params.push(`%${invoiceNumber}%`)
+  }
+  const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
+  const offset = (page - 1) * pageSize
+  const [countRows] = await pool.execute(
+    `SELECT COUNT(*) AS total
+     FROM invoices i
+     ${whereClause}`,
+    params,
+  )
+  const [rows] = await pool.execute(
+    `SELECT
+       i.id,
+       i.invoice_number,
+       i.invoice_date,
+       i.seller_name,
+       i.seller_tax_id,
+       i.total_amount,
+       i.submitted_at,
+       i.qualification_status,
+       i.qualification_reason,
+       i.cumulative_amount,
+       i.cumulative_week_start,
+       i.finance_status,
+       i.reimbursement_status,
+       i.source_batch_id,
+       i.created_at,
+       i.updated_at,
+       f.id AS file_id,
+       f.original_name,
+       f.extraction_status,
+       f.extraction_error
+     FROM invoices i
+     LEFT JOIN invoice_files f ON f.invoice_id = i.id
+     ${whereClause}
+     ORDER BY i.created_at DESC, i.id DESC
+     LIMIT ? OFFSET ?`,
+    [...params, pageSize, offset],
+  )
+  return {
+    rows,
+    total: Number(countRows[0]?.total || 0),
+  }
+}
+
 async function updateQualificationByCategory({ connection = pool, id, categoryResult, reason }) {
   if (categoryResult === '可以') return
   await connection.execute(
@@ -125,4 +199,4 @@ async function markExtractionFailure({ connection = pool, id, error }) {
   )
 }
 
-module.exports = { createDraft, updateExtractionResult, createItems, findItemsByInvoiceIds, updateQualificationByCategory, updateItemPriceType, updateQualificationByPrice, markExtractionFailure }
+module.exports = { createDraft, updateExtractionResult, createItems, findItemsByInvoiceIds, findPage, updateQualificationByCategory, updateItemPriceType, updateQualificationByPrice, markExtractionFailure }

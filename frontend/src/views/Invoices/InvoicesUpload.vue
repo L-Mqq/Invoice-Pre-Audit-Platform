@@ -176,8 +176,10 @@ async function startUpload() {
     await uploadBatchStore.upload(files.value.map((file) => file.file))
     files.value = files.value.map((file, index) => {
       const storedFile = batch.value?.files[index]
-      const result = batch.value?.results.find((item) => item.fileId === storedFile?.id)
-      return { ...file, status: result?.status || 'failed', error: result?.error }
+      const result = batch.value?.results?.find((item) => item.fileId === storedFile?.id)
+      const status = result?.status
+        || (storedFile?.extractionStatus === 'success' ? 'success' : 'failed')
+      return { ...file, status, error: result?.error }
     })
   } catch (error) {
     uploadError.value = error instanceof Error ? error.message : '发票上传失败'
