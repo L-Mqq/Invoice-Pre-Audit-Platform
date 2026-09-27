@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { nextTick, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 const emit = defineEmits<{ select: [key: string] }>()
@@ -12,7 +12,12 @@ watch(() => route.name, (name) => {
   const menuKey = Object.keys(routeMap).find((key) => routeMap[key] === name)
   if (menuKey) {
     selected.value = menuKey
-    menuRef.value?.updateActiveIndex(menuKey)
+    nextTick(() => {
+      menuRef.value?.updateActiveIndex(menuKey)
+      if (['invoice-list', 'upload-invoice', 'reimbursement-progress'].includes(menuKey)) {
+        menuRef.value?.open('invoice')
+      }
+    })
   }
 }, { immediate: true })
 
@@ -24,9 +29,6 @@ function handleSelect(key: string) {
   if (routeName && route.name !== routeName) router.push({ name: routeName })
 }
 
-function handleInvoiceTitleClick() {
-  handleSelect('invoice-list')
-}
 </script>
 
 <template>
@@ -37,9 +39,9 @@ function handleInvoiceTitleClick() {
         <span>本周概览</span>
       </el-menu-item>
 
-      <el-sub-menu index="invoice" @title-click="handleInvoiceTitleClick">
+      <el-sub-menu index="invoice">
         <template #title>
-          <span class="invoice-menu-title" @click.stop="handleInvoiceTitleClick">
+          <span class="invoice-menu-title">
             <span class="menu-icon">▤</span>
             <span>发票管理</span>
           </span>
@@ -62,7 +64,7 @@ function handleInvoiceTitleClick() {
 .side-menu { height: 100%; border-right: 0; padding: 14px 10px; }
 .side-menu :deep(.el-menu-item), .side-menu :deep(.el-sub-menu__title) { height: 46px; line-height: 46px; margin: 3px 0; border-radius: 9px; color: #475569; }
 .side-menu :deep(.el-menu-item.is-active) { color: #2563eb; background: #eff6ff; font-weight: 600; }
-.side-menu :deep(.el-sub-menu.is-opened > .el-sub-menu__title) { color: #2563eb; }
+.side-menu :deep(.el-sub-menu.is-opened > .el-sub-menu__title) { color: #475569; }
 .side-menu :deep(.el-menu--inline) { background: transparent; }
 .side-menu :deep(.el-menu--inline .el-menu-item) { min-width: 0; padding-left: 48px !important; font-size: 13px; }
 .menu-icon { display: inline-block; width: 24px; margin-right: 8px; color: #64748b; font-size: 17px; text-align: center; }
