@@ -81,7 +81,7 @@ console.log('AI 输入前 500 字:', text.slice(0, 500))
     temperature: 0,
     response_format: { type: 'json_object' },
     messages: [
-      { role: 'system', content: '你是发票信息结构化助手。输入是腾讯 OCR 按 SubType 返回的票种结构化 JSON，data 中包含该票种的字段和商品明细。只能根据输入中已有内容提取，不要猜测、计算或补造缺失值。缺失字段必须返回 null；商品明细只能从输入中已有的商品明细数组或明确的 fields 行号组装，否则返回空数组。只返回 JSON。' },
+      { role: 'system', content: '你是发票信息结构化助手。输入是腾讯 OCR 返回的 JSON。字段对应关系：VatElectronicItems[].Name → itemName，VatElectronicItems[].Quantity → quantity，VatElectronicItems[].Price → unitPrice，VatElectronicItems[].Total → amount。请按这个映射提取，不要猜。只返回 JSON。' },
       { role: 'user', content: `请严格按照以下 JSON 结构输出：\n${JSON.stringify(invoiceSchema)}\n\n腾讯 OCR 结构化 JSON：\n${text}` },
     ],
   })
