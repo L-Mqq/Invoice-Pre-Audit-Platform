@@ -10,7 +10,6 @@ export interface UploadBatchFile {
   invoiceId: number
   originalName: string
   storageKey: string
-  mimeType?: string
   extractionStatus: 'pending' | 'success' | 'failed'
   extractionError?: string | null
   invoice?: UploadInvoice
@@ -62,7 +61,7 @@ export interface UploadBatch {
   successCount: number
   failedCount: number
   files: UploadBatchFile[]
-  results?: UploadBatchResult[]
+  results: UploadBatchResult[]
 }
 
 interface UploadBatchResponse {
@@ -70,6 +69,7 @@ interface UploadBatchResponse {
   message: string
   data: { batch: UploadBatch }
 }
+
 
 export async function createUploadBatch(files: File[], onUploadProgress?: (percent: number) => void): Promise<UploadBatch> {
   const formData = new FormData()
