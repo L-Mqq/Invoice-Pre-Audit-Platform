@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { getInvoices, type InvoiceListItem } from '../../apis/invoices'
 import {
   getFinanceStatusLabel,
@@ -16,6 +17,7 @@ const searchForm = ref({
   financeStatus: '',
   reimbursementStatus: '',
 })
+const router = useRouter()
 
 const invoices = ref<InvoiceRow[]>([])
 const page = ref(1)
@@ -43,6 +45,10 @@ function resetFilters() {
 
 function formatAmount(amount: number | string) {
   return `¥${Number(amount || 0).toFixed(2)}`
+}
+
+function goToUpload() {
+  router.push({ name: 'upload-invoice' })
 }
 
 async function loadInvoices() {
@@ -87,7 +93,7 @@ onMounted(loadInvoices)
   <section class="invoice-list-page">
     <div class="page-heading">
       <div><p class="eyebrow">INVOICE REGISTER</p><h1>发票列表</h1><p class="subtitle">查看已上传发票、预审结果和后续处理状态。</p></div>
-      <el-button type="primary">上传发票</el-button>
+      <el-button type="primary" @click="goToUpload">上传发票</el-button>
     </div>
 
     <div class="summary-grid">
