@@ -10,6 +10,7 @@ export interface UploadBatchFile {
   invoiceId: number
   originalName: string
   storageKey: string
+  mimeType?: string
   extractionStatus: 'pending' | 'success' | 'failed'
   extractionError?: string | null
   invoice?: UploadInvoice

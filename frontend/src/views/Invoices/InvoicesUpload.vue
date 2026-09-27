@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useUploadBatchStore } from '../../stores/uploadBatch'
+import { previewInvoiceFile } from '../../apis/invoiceFile'
 import {
   getFinanceStatusLabel,
   getQualificationStatusLabel,
@@ -26,6 +27,20 @@ const batch = computed(() => uploadBatchStore.currentBatch)
 const batchId = computed(() => batch.value?.id || '-')
 const batchFiles = computed(() => batch.value?.files || [])
 const uploadError = ref('')
+const previewVisible = ref(false)
+const previewLoading = ref(false)
+const previewUrl = ref('')
+const previewName = ref('')
+
+watch(previewVisible, (visible) => {
+  document.documentElement.style.overflow = visible ? 'hidden' : ''
+  document.body.style.overflow = visible ? 'hidden' : ''
+})
+
+onBeforeUnmount(() => {
+  document.documentElement.style.overflow = ''
+  document.body.style.overflow = ''
+})
 const hasFiles = computed(() => files.value.length > 0)
 const hasBatch = computed(() => Boolean(batch.value))
 const canUpload = computed(() => hasFiles.value && !isUploading.value)
@@ -36,6 +51,31 @@ const successCount = computed(() => files.value.length
 const failedCount = computed(() => files.value.length
   ? files.value.filter((file) => file.status === 'failed').length
   : batch.value?.failedCount || 0)
+
+async function openPreview(fileId: number, fileName: string) {
+  previewLoading.value = true
+  previewName.value = fileName
+  try {
+    const blob = await previewInvoiceFile(fileId)
+    if (previewUrl.value) {
+      URL.revokeObjectURL(previewUrl.value)
+    }
+    previewUrl.value = URL.createObjectURL(blob)
+    previewVisible.value = true
+  } catch (error) {
+    uploadError.value = error instanceof Error ? error.message : '文件预览失败'
+  } finally {
+    previewLoading.value = false
+  }
+}
+
+function closePreview() {
+  previewVisible.value = false
+  if (previewUrl.value) {
+    URL.revokeObjectURL(previewUrl.value)
+    previewUrl.value = ''
+  }
+}
 
 onMounted(async () => {
   if (!batch.value) {
@@ -175,7 +215,7 @@ async function startUpload() {
           <div class="batch-files-title"><strong>最近上传文件</strong><span>{{ batchFiles.length }} 个文件</span></div>
           <div class="batch-file-list">
             <article v-for="file in batchFiles" :key="file.id" class="batch-file-item">
-              <div class="batch-file-header"><strong>{{ file.originalName }}</strong><el-tag :type="file.extractionStatus === 'success' ? 'success' : file.extractionStatus === 'failed' ? 'danger' : 'warning'" effect="plain">{{ file.extractionStatus === 'success' ? '解析成功' : file.extractionStatus === 'failed' ? '解析失败' : '处理中' }}</el-tag></div>
+              <div class="batch-file-header"><strong>{{ file.originalName }}</strong><div class="batch-file-actions"><el-tag :type="file.extractionStatus === 'success' ? 'success' : file.extractionStatus === 'failed' ? 'danger' : 'warning'" effect="plain">{{ file.extractionStatus === 'success' ? '解析成功' : file.extractionStatus === 'failed' ? '解析失败' : '处理中' }}</el-tag><el-button v-if="file.originalName.toLowerCase().endsWith('.pdf')" link type="primary" :loading="previewLoading && previewName === file.originalName" @click="openPreview(file.id, file.originalName)">预览</el-button></div></div>
               <p v-if="file.extractionError" class="batch-file-error">{{ file.extractionError }}</p>
               <template v-else-if="file.invoice">
                 <div class="invoice-summary"><span>发票号码：{{ file.invoice.invoiceNumber || '未识别' }}</span><span>销售方：{{ file.invoice.sellerName || '未识别' }}</span><span>价税合计：{{ file.invoice.totalAmount ?? '-' }} 元</span></div>
@@ -186,16 +226,20 @@ async function startUpload() {
         </div>
       </el-card>
     </div>
+    <el-dialog v-model="previewVisible" :title="previewName" width="min(900px, 92vw)" :lock-scroll="true" destroy-on-close @closed="closePreview">
+      <div class="preview-frame"><iframe v-if="previewUrl" :src="previewUrl" :title="previewName" /></div>
+    </el-dialog>
   </section>
 </template>
 
 <style scoped>
 :global(html), :global(body), :global(#app) { min-height: 100%; height: auto; overflow-y: auto; }
+:global(body.el-popup-parent--hidden) { overflow: hidden !important; }
 .upload-page { max-width: 1180px; min-height: calc(100vh - 170px); margin: 0 auto; padding-bottom: 56px; color: #0f172a; }
 .page-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; margin-bottom: 24px; }.eyebrow { margin: 0 0 6px; color: #2563eb; font-size: 11px; font-weight: 700; letter-spacing: .14em; }h1 { margin: 0; font-size: 28px; letter-spacing: -.02em; }.subtitle { margin: 8px 0 0; color: #64748b; font-size: 14px; }.rule-hint { padding: 10px 14px; border: 1px solid #dbeafe; border-radius: 9px; background: #eff6ff; color: #2563eb; font-size: 12px; white-space: nowrap; }
 .upload-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, .85fr); gap: 20px; }.upload-card, .result-card { border: 1px solid #e2e8f0; border-radius: 14px; }.upload-card { display: flex; flex-direction: column; overflow: visible; }.upload-card :deep(.el-card__body) { display: flex; flex: 1; min-height: 0; flex-direction: column; box-sizing: border-box; overflow: visible; }.drop-zone { min-height: 270px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1.5px dashed #bfdbfe; border-radius: 12px; background: #f8fbff; cursor: pointer; transition: .2s; }.drop-zone:hover, .drop-zone.dragging { border-color: #2563eb; background: #eff6ff; }.upload-icon { width: 48px; height: 48px; margin-bottom: 12px; border-radius: 14px; background: #dbeafe; color: #2563eb; font-size: 30px; line-height: 45px; text-align: center; }.drop-zone h2 { margin: 0; font-size: 17px; }.drop-zone p { margin: 7px 0 15px; color: #64748b; font-size: 13px; }.drop-note { margin-top: 14px; color: #94a3b8; font-size: 12px; }
 .selected-header { display: flex; align-items: center; justify-content: space-between; margin: 22px 0 10px; }.selected-header strong { margin-right: 8px; }.selected-header span { color: #94a3b8; font-size: 12px; }.file-list { max-height: 250px; min-height: 0; border: 1px solid #e2e8f0; border-radius: 10px; overflow: auto; }.file-row { display: flex; align-items: center; gap: 10px; min-height: 62px; padding: 9px 12px; border-bottom: 1px solid #f1f5f9; }.file-row:last-child { border-bottom: 0; }.file-type { width: 38px; padding: 5px 0; border-radius: 6px; background: #eff6ff; color: #2563eb; font-size: 10px; font-weight: 700; text-align: center; }.file-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }.file-info strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }.file-info span { color: #94a3b8; font-size: 12px; }.action-bar { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 16px; margin-top: 20px; padding: 20px 0 16px; background: #fff; position: sticky; bottom: 16px; z-index: 2; box-shadow: 0 -8px 14px -14px rgba(15, 23, 42, .35); }.processing-text { color: #64748b; font-size: 12px; }.dot { display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: #f59e0b; }
 .card-title { display: flex; align-items: center; justify-content: space-between; }.card-title h2 { margin: 0; font-size: 17px; }.metrics { display: grid; grid-template-columns: repeat(3, 1fr); margin: 22px 0; padding: 16px 0; border-top: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9; }.metrics div { display: flex; flex-direction: column; gap: 5px; text-align: center; border-right: 1px solid #f1f5f9; }.metrics div:last-child { border-right: 0; }.metrics strong { font-size: 24px; }.metrics span { color: #94a3b8; font-size: 12px; }.metrics .success strong { color: #16a34a; }.metrics .failed strong { color: #dc2626; }.empty-result { padding: 46px 20px 28px; text-align: center; color: #64748b; }.empty-icon { width: 40px; height: 40px; margin: 0 auto 12px; border-radius: 50%; background: #dcfce7; color: #16a34a; font-size: 23px; line-height: 40px; }.empty-result strong { color: #334155; font-size: 14px; }.empty-result p { margin: 9px auto 0; max-width: 250px; font-size: 12px; line-height: 1.7; }
-.batch-files { margin-top: 20px; }.batch-files-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }.batch-files-title span { color: #94a3b8; font-size: 12px; }.batch-file-list { max-height: 430px; overflow-y: auto; }.batch-file-item { padding: 12px; border: 1px solid #e2e8f0; border-radius: 10px; }.batch-file-item + .batch-file-item { margin-top: 10px; }.batch-file-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }.batch-file-header strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }.batch-file-error { margin: 9px 0 0; color: #dc2626; font-size: 12px; line-height: 1.5; }.invoice-summary, .invoice-status { display: grid; gap: 5px; margin-top: 10px; color: #64748b; font-size: 12px; line-height: 1.5; }.invoice-status { margin-top: 8px; padding-top: 8px; border-top: 1px solid #f1f5f9; color: #475569; }
+.batch-files { margin-top: 20px; }.batch-files-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }.batch-files-title span { color: #94a3b8; font-size: 12px; }.batch-file-list { max-height: 430px; overflow-y: auto; }.batch-file-item { padding: 12px; border: 1px solid #e2e8f0; border-radius: 10px; }.batch-file-item + .batch-file-item { margin-top: 10px; }.batch-file-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }.batch-file-header strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }.batch-file-actions { display: flex; flex-shrink: 0; align-items: center; gap: 4px; }.batch-file-error { margin: 9px 0 0; color: #dc2626; font-size: 12px; line-height: 1.5; }.invoice-summary, .invoice-status { display: grid; gap: 5px; margin-top: 10px; color: #64748b; font-size: 12px; line-height: 1.5; }.invoice-status { margin-top: 8px; padding-top: 8px; border-top: 1px solid #f1f5f9; color: #475569; }.preview-frame { height: 70vh; min-height: 420px; }.preview-frame iframe { width: 100%; height: 100%; border: 0; }
 @media (max-width: 850px) { .page-heading { align-items: flex-start; flex-direction: column; }.rule-hint { white-space: normal; }.upload-grid { grid-template-columns: 1fr; } }
 </style>
