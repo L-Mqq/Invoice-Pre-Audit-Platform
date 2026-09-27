@@ -63,6 +63,37 @@ async function updateQualificationByCategory({ connection = pool, id, categoryRe
   )
 }
 
+async function updateItemPriceType({ connection = pool, itemId, priceType, reason }) {
+  await connection.execute(
+    `UPDATE invoice_items
+        SET price_type = ?, category_reason = CASE
+          WHEN ? IS NULL THEN category_reason
+          WHEN category_reason IS NULL OR category_reason = '' THEN ?
+          ELSE CONCAT(category_reason, '；', ?)
+        END
+      WHERE id = ?`,
+    [priceType, reason, reason, reason, itemId],
+  )
+}
+
+async function updateQualificationByPrice({ connection = pool, id, priceResult, reason }) {
+  if (priceResult === 'asset') {
+    await connection.execute(
+      `UPDATE invoices
+          SET qualification_status = 'rejected', qualification_reason = ?
+        WHERE id = ?`,
+      [reason, id],
+    )
+  } else if (priceResult === 'invalid') {
+    await connection.execute(
+      `UPDATE invoices
+          SET qualification_status = 'pending_manual', qualification_reason = ?
+        WHERE id = ? AND qualification_status <> 'rejected'`,
+      [reason, id],
+    )
+  }
+}
+
 // 校验失败转人工
 async function markExtractionFailure({ connection = pool, id, error }) {
   await connection.execute(
@@ -71,4 +102,4 @@ async function markExtractionFailure({ connection = pool, id, error }) {
   )
 }
 
-module.exports = { createDraft, updateExtractionResult, createItems, updateQualificationByCategory, markExtractionFailure }
+module.exports = { createDraft, updateExtractionResult, createItems, updateQualificationByCategory, updateItemPriceType, updateQualificationByPrice, markExtractionFailure }

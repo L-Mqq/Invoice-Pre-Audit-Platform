@@ -11,6 +11,7 @@ const { recognizeGeneralInvoice } = require('../extractors/tencentOcrExtractor')
 const { structureInvoiceText } = require('../extractors/agnesInvoiceParser')
 const { validateInvoiceExtraction } = require('../validators/invoiceExtractionValidator')
 const { judgeItems } = require('./categoryJudgmentService')
+const { judgePriceItems } = require('./priceJudgmentService')
 const { getExtractionConfig } = require('../config/extraction')
 
 function badRequest(message) {
@@ -108,6 +109,18 @@ async function createUploadBatch({ files, createdBy = null }) {
               id: storedFile.invoiceId,
               categoryResult: categoryJudgment.invoiceCategoryResult,
               reason: categoryJudgment.reason,
+            })
+            const priceJudgment = await judgePriceItems({
+              connection: resultConnection,
+              items: createdItems,
+              persist: true,
+              updateItem: invoiceRepository.updateItemPriceType,
+            })
+            await invoiceRepository.updateQualificationByPrice({
+              connection: resultConnection,
+              id: storedFile.invoiceId,
+              priceResult: priceJudgment.invoicePriceResult,
+              reason: priceJudgment.reason,
             })
           }
           await invoiceFileRepository.updateExtractionStatus({ connection: resultConnection, id: storedFile.id, status: 'success' })
