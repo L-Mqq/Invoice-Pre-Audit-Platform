@@ -12,6 +12,7 @@ const { structureInvoiceText } = require('../extractors/agnesInvoiceParser')
 const { validateInvoiceExtraction } = require('../validators/invoiceExtractionValidator')
 const { judgeItems } = require('./categoryJudgmentService')
 const { judgePriceItems } = require('./priceJudgmentService')
+const voucherRepository = require('../repositories/voucherRepository')
 const { getExtractionConfig } = require('../config/extraction')
 
 function badRequest(message) {
@@ -116,11 +117,18 @@ async function createUploadBatch({ files, createdBy = null }) {
               persist: true,
               updateItem: invoiceRepository.updateItemPriceType,
             })
+            let priceResult = priceJudgment.invoicePriceResult
+            if (priceResult === 'low_value') {
+              const hasVoucher = await voucherRepository.hasApprovedCompleteGroup({ connection: resultConnection, invoiceId: storedFile.invoiceId })
+              if (hasVoucher) priceResult = 'continue'
+            }
             await invoiceRepository.updateQualificationByPrice({
               connection: resultConnection,
               id: storedFile.invoiceId,
-              priceResult: priceJudgment.invoicePriceResult,
-              reason: priceJudgment.reason,
+              priceResult,
+              reason: priceResult === 'continue' && priceJudgment.invoicePriceResult === 'low_value'
+                ? '低值品已有审核通过且同时包含订单截图和支付记录的凭证组'
+                : priceJudgment.reason,
             })
           }
           await invoiceFileRepository.updateExtractionStatus({ connection: resultConnection, id: storedFile.id, status: 'success' })

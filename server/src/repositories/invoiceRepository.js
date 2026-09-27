@@ -91,6 +91,13 @@ async function updateQualificationByPrice({ connection = pool, id, priceResult, 
         WHERE id = ? AND qualification_status <> 'rejected'`,
       [reason, id],
     )
+  } else if (priceResult === 'low_value') {
+    await connection.execute(
+      `UPDATE invoices
+          SET qualification_status = 'pending_voucher', qualification_reason = ?
+        WHERE id = ? AND qualification_status = 'pending'`,
+      [reason, id],
+    )
   }
 }
 
