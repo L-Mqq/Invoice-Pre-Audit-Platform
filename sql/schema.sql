@@ -133,6 +133,7 @@ CREATE TABLE IF NOT EXISTS invoice_items (
   item_name VARCHAR(255) NOT NULL COMMENT '商品名称',
   quantity DECIMAL(12, 4) NULL COMMENT '商品数量',
   unit_price DECIMAL(12, 2) NOT NULL COMMENT '商品含税单价，用于资产/低值品判断',
+  price_type ENUM('material', 'low_value', 'asset') NULL COMMENT '单价分类：材料、低值品、资产',
   line_amount DECIMAL(12, 2) NOT NULL COMMENT '商品明细金额',
   -- AI 的原始品类判断，不允许被人工结果覆盖。
   ai_category_result ENUM('可以', '存疑', '不可以') NULL COMMENT 'AI 原始品类判断',

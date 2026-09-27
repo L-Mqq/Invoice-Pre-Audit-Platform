@@ -2,12 +2,14 @@ const OpenAI = require('openai')
 const { getExtractionConfig } = require('../config/extraction')
 const { validateCategoryJudgment } = require('../validators/categoryJudgmentValidator')
 
+// 调用 Agnes AI；
 function getClient() {
   const { agnes } = getExtractionConfig()
   if (!agnes.apiKey) throw new Error('AGNES_API_KEY is required')
   return { client: new OpenAI({ apiKey: agnes.apiKey, baseURL: agnes.baseURL, timeout: agnes.timeout }), model: agnes.model }
 }
 
+// 按固定 JSON 结构返回品类结果
 async function classifyItem({ itemName, rules }) {
   if (!itemName || !String(itemName).trim()) throw new Error('itemName is required')
   const { client, model } = getClient()
