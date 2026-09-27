@@ -1,6 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useUploadBatchStore } from '../../stores/uploadBatch'
+import {
+  getFinanceStatusLabel,
+  getQualificationStatusLabel,
+  getReimbursementStatusLabel,
+} from '../../utils/status'
 
 type UploadStatus = 'ready' | 'uploading' | 'success' | 'failed'
 interface UploadFile {
@@ -19,6 +24,7 @@ const inputRef = ref<HTMLInputElement>()
 const uploadBatchStore = useUploadBatchStore()
 const batch = computed(() => uploadBatchStore.currentBatch)
 const batchId = computed(() => batch.value?.id || '-')
+const batchFiles = computed(() => batch.value?.files || [])
 const uploadError = ref('')
 const hasFiles = computed(() => files.value.length > 0)
 const hasBatch = computed(() => Boolean(batch.value))
@@ -165,7 +171,19 @@ async function startUpload() {
         <div class="metrics"><div><strong>{{ totalCount }}</strong><span>文件总数</span></div><div class="success"><strong>{{ successCount }}</strong><span>解析成功</span></div><div class="failed"><strong>{{ failedCount }}</strong><span>解析失败</span></div></div>
         <el-alert v-if="failedCount" title="部分文件未能完成解析" type="warning" :closable="false" show-icon description="请检查失败原因，修正文件后重新上传。" />
         <div v-else-if="!hasBatch" class="empty-result"><div class="empty-icon">✓</div><strong>上传后查看处理结果</strong><p>系统会逐个提取发票信息，并根据商品单价规则生成预审结果。</p></div>
-        <div v-else class="empty-result"><div class="empty-icon">✓</div><strong>已恢复最近上传批次</strong><p>批次 {{ batchId }} 的处理结果已从服务器重新加载。</p></div>
+        <div v-else-if="hasBatch" class="batch-files">
+          <div class="batch-files-title"><strong>最近上传文件</strong><span>{{ batchFiles.length }} 个文件</span></div>
+          <div class="batch-file-list">
+            <article v-for="file in batchFiles" :key="file.id" class="batch-file-item">
+              <div class="batch-file-header"><strong>{{ file.originalName }}</strong><el-tag :type="file.extractionStatus === 'success' ? 'success' : file.extractionStatus === 'failed' ? 'danger' : 'warning'" effect="plain">{{ file.extractionStatus === 'success' ? '解析成功' : file.extractionStatus === 'failed' ? '解析失败' : '处理中' }}</el-tag></div>
+              <p v-if="file.extractionError" class="batch-file-error">{{ file.extractionError }}</p>
+              <template v-else-if="file.invoice">
+                <div class="invoice-summary"><span>发票号码：{{ file.invoice.invoiceNumber || '未识别' }}</span><span>销售方：{{ file.invoice.sellerName || '未识别' }}</span><span>价税合计：{{ file.invoice.totalAmount ?? '-' }} 元</span></div>
+                <div class="invoice-status"><span>资质审核：{{ getQualificationStatusLabel(file.invoice.qualificationStatus) }}</span><span>财务提交：{{ getFinanceStatusLabel(file.invoice.financeStatus) }}</span><span>报销状态：{{ getReimbursementStatusLabel(file.invoice.reimbursementStatus) }}</span></div>
+              </template>
+            </article>
+          </div>
+        </div>
       </el-card>
     </div>
   </section>
@@ -178,5 +196,6 @@ async function startUpload() {
 .upload-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, .85fr); gap: 20px; }.upload-card, .result-card { border: 1px solid #e2e8f0; border-radius: 14px; }.upload-card { display: flex; flex-direction: column; overflow: visible; }.upload-card :deep(.el-card__body) { display: flex; flex: 1; min-height: 0; flex-direction: column; box-sizing: border-box; overflow: visible; }.drop-zone { min-height: 270px; flex-shrink: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 1.5px dashed #bfdbfe; border-radius: 12px; background: #f8fbff; cursor: pointer; transition: .2s; }.drop-zone:hover, .drop-zone.dragging { border-color: #2563eb; background: #eff6ff; }.upload-icon { width: 48px; height: 48px; margin-bottom: 12px; border-radius: 14px; background: #dbeafe; color: #2563eb; font-size: 30px; line-height: 45px; text-align: center; }.drop-zone h2 { margin: 0; font-size: 17px; }.drop-zone p { margin: 7px 0 15px; color: #64748b; font-size: 13px; }.drop-note { margin-top: 14px; color: #94a3b8; font-size: 12px; }
 .selected-header { display: flex; align-items: center; justify-content: space-between; margin: 22px 0 10px; }.selected-header strong { margin-right: 8px; }.selected-header span { color: #94a3b8; font-size: 12px; }.file-list { max-height: 250px; min-height: 0; border: 1px solid #e2e8f0; border-radius: 10px; overflow: auto; }.file-row { display: flex; align-items: center; gap: 10px; min-height: 62px; padding: 9px 12px; border-bottom: 1px solid #f1f5f9; }.file-row:last-child { border-bottom: 0; }.file-type { width: 38px; padding: 5px 0; border-radius: 6px; background: #eff6ff; color: #2563eb; font-size: 10px; font-weight: 700; text-align: center; }.file-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }.file-info strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }.file-info span { color: #94a3b8; font-size: 12px; }.action-bar { display: flex; flex-shrink: 0; align-items: center; justify-content: space-between; gap: 16px; margin-top: 20px; padding: 20px 0 16px; background: #fff; position: sticky; bottom: 16px; z-index: 2; box-shadow: 0 -8px 14px -14px rgba(15, 23, 42, .35); }.processing-text { color: #64748b; font-size: 12px; }.dot { display: inline-block; width: 7px; height: 7px; margin-right: 6px; border-radius: 50%; background: #f59e0b; }
 .card-title { display: flex; align-items: center; justify-content: space-between; }.card-title h2 { margin: 0; font-size: 17px; }.metrics { display: grid; grid-template-columns: repeat(3, 1fr); margin: 22px 0; padding: 16px 0; border-top: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9; }.metrics div { display: flex; flex-direction: column; gap: 5px; text-align: center; border-right: 1px solid #f1f5f9; }.metrics div:last-child { border-right: 0; }.metrics strong { font-size: 24px; }.metrics span { color: #94a3b8; font-size: 12px; }.metrics .success strong { color: #16a34a; }.metrics .failed strong { color: #dc2626; }.empty-result { padding: 46px 20px 28px; text-align: center; color: #64748b; }.empty-icon { width: 40px; height: 40px; margin: 0 auto 12px; border-radius: 50%; background: #dcfce7; color: #16a34a; font-size: 23px; line-height: 40px; }.empty-result strong { color: #334155; font-size: 14px; }.empty-result p { margin: 9px auto 0; max-width: 250px; font-size: 12px; line-height: 1.7; }
+.batch-files { margin-top: 20px; }.batch-files-title { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }.batch-files-title span { color: #94a3b8; font-size: 12px; }.batch-file-list { max-height: 430px; overflow-y: auto; }.batch-file-item { padding: 12px; border: 1px solid #e2e8f0; border-radius: 10px; }.batch-file-item + .batch-file-item { margin-top: 10px; }.batch-file-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }.batch-file-header strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }.batch-file-error { margin: 9px 0 0; color: #dc2626; font-size: 12px; line-height: 1.5; }.invoice-summary, .invoice-status { display: grid; gap: 5px; margin-top: 10px; color: #64748b; font-size: 12px; line-height: 1.5; }.invoice-status { margin-top: 8px; padding-top: 8px; border-top: 1px solid #f1f5f9; color: #475569; }
 @media (max-width: 850px) { .page-heading { align-items: flex-start; flex-direction: column; }.rule-hint { white-space: normal; }.upload-grid { grid-template-columns: 1fr; } }
 </style>
