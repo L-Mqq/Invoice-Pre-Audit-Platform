@@ -43,6 +43,16 @@ async function findDetailsByBatchId(batchId) {
   return rows
 }
 
+async function findById(id) {
+  const [rows] = await pool.execute(
+    `SELECT id, batch_id, invoice_id, original_name, storage_key, mime_type, file_size
+     FROM invoice_files
+     WHERE id = ?`,
+    [id],
+  )
+  return rows[0] || null
+}
+
 // 更新提取状态
 async function updateExtractionStatus({ connection = pool, id, status, error = null }) {
   await connection.execute(
@@ -51,4 +61,4 @@ async function updateExtractionStatus({ connection = pool, id, status, error = n
   )
 }
 
-module.exports = { createFile, findByBatchId, findDetailsByBatchId, updateExtractionStatus }
+module.exports = { createFile, findByBatchId, findDetailsByBatchId, findById, updateExtractionStatus }
