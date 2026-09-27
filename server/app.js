@@ -53,6 +53,7 @@ app.use((req, res) => {
 // 统一错误处理中间件必须放在所有路由之后。
 app.use(errorHandler)
 
+
 async function start() {
   // 启动监听前先确认数据库可用，避免服务启动后才暴露连接错误。
   await testConnection()

@@ -15,7 +15,7 @@ export const useAuthStore = defineStore('auth', () => {
           token.value = nextToken;
           user.value = nextUser }
   
-          function logout() { 
+  function logout() { 
           clearToken(); 
           token.value = null; 
           user.value = null 

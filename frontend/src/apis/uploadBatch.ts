@@ -11,6 +11,39 @@ export interface UploadBatchFile {
   originalName: string
   storageKey: string
   extractionStatus: 'pending' | 'success' | 'failed'
+  extractionError?: string | null
+  invoice?: UploadInvoice
+  items?: UploadInvoiceItem[]
+}
+
+export interface UploadInvoice {
+  invoiceNumber: string | null
+  invoiceDate: string | null
+  sellerName: string | null
+  sellerTaxId: string | null
+  totalAmount: number | string
+  submittedAt: string | null
+  qualificationStatus: string
+  qualificationReason: string | null
+  cumulativeAmount: number | string | null
+  cumulativeWeekStart: string | null
+  financeStatus: string
+  reimbursementStatus: string
+  manualNote: string | null
+}
+
+export interface UploadInvoiceItem {
+  id: number
+  invoiceId: number
+  itemName: string
+  quantity: number | string | null
+  unitPrice: number | string
+  priceType: 'material' | 'low_value' | 'asset' | null
+  lineAmount: number | string
+  aiCategoryResult: string | null
+  manualCategoryResult: string | null
+  finalCategoryResult: string | null
+  categoryReason: string | null
 }
 
 export interface UploadBatchResult {
@@ -51,6 +84,18 @@ export async function createUploadBatch(files: File[], onUploadProgress?: (perce
   } catch (error: unknown) {
     if (axios.isAxiosError<{ message?: string }>(error)) {
       throw new Error(error.response?.data?.message || '发票上传失败')
+    }
+    throw error
+  }
+}
+
+export async function getUploadBatch(batchId: string): Promise<UploadBatch> {
+  try {
+    const response = await http.get<{ success: boolean; data: { batch: UploadBatch } }>(`/upload-batches/${batchId}`)
+    return response.data.data.batch
+  } catch (error: unknown) {
+    if (axios.isAxiosError<{ message?: string }>(error)) {
+      throw new Error(error.response?.data?.message || '获取上传批次失败')
     }
     throw error
   }

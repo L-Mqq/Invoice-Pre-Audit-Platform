@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { createUploadBatch, type UploadBatch } from '../../apis/uploadBatch'
+import { computed, onMounted, ref } from 'vue'
+import { useUploadBatchStore } from '../../stores/uploadBatch'
 
 type UploadStatus = 'ready' | 'uploading' | 'success' | 'failed'
 interface UploadFile {
@@ -16,12 +16,30 @@ const isDragging = ref(false)
 const isUploading = ref(false)
 const files = ref<UploadFile[]>([])
 const inputRef = ref<HTMLInputElement>()
-const batch = ref<UploadBatch>()
+const uploadBatchStore = useUploadBatchStore()
+const batch = computed(() => uploadBatchStore.currentBatch)
+const batchId = computed(() => batch.value?.id || '-')
 const uploadError = ref('')
 const hasFiles = computed(() => files.value.length > 0)
+const hasBatch = computed(() => Boolean(batch.value))
 const canUpload = computed(() => hasFiles.value && !isUploading.value)
-const successCount = computed(() => files.value.filter((file) => file.status === 'success').length)
-const failedCount = computed(() => files.value.filter((file) => file.status === 'failed').length)
+const totalCount = computed(() => files.value.length || batch.value?.totalCount || 0)
+const successCount = computed(() => files.value.length
+  ? files.value.filter((file) => file.status === 'success').length
+  : batch.value?.successCount || 0)
+const failedCount = computed(() => files.value.length
+  ? files.value.filter((file) => file.status === 'failed').length
+  : batch.value?.failedCount || 0)
+
+onMounted(async () => {
+  if (!batch.value) {
+    try {
+      await uploadBatchStore.restoreLastBatch()
+    } catch (error) {
+      uploadError.value = error instanceof Error ? error.message : '恢复上传批次失败'
+    }
+  }
+})
 
 function openFilePicker() {
   if (isUploading.value) {
@@ -55,7 +73,7 @@ function addFiles(selectedFiles: FileList | File[]) {
     return
   }
   uploadError.value = ''
-  batch.value = undefined
+  uploadBatchStore.clearBatch()
   files.value = incoming.slice(0, 50).map((file, index) => ({
     id: Date.now() + index,
     file,
@@ -109,7 +127,7 @@ async function startUpload() {
     error: undefined,
   }))
   try {
-    batch.value = await createUploadBatch(files.value.map((file) => file.file))
+    await uploadBatchStore.upload(files.value.map((file) => file.file))
     files.value = files.value.map((file, index) => {
       const storedFile = batch.value?.files[index]
       const result = batch.value?.results.find((item) => item.fileId === storedFile?.id)
@@ -143,10 +161,11 @@ async function startUpload() {
         <el-alert v-if="uploadError" class="upload-error" :title="uploadError" type="error" :closable="false" show-icon />
       </el-card>
       <el-card class="result-card" shadow="never">
-        <div class="card-title"><h2>批次结果</h2><el-tag v-if="isUploading" type="warning">处理中</el-tag><el-tag v-else-if="hasFiles && successCount + failedCount === files.length" :type="failedCount ? 'danger' : 'success'">{{ failedCount ? '部分失败' : '已完成' }}</el-tag><el-tag v-else type="info">未开始</el-tag></div>
-        <div class="metrics"><div><strong>{{ files.length }}</strong><span>文件总数</span></div><div class="success"><strong>{{ successCount }}</strong><span>解析成功</span></div><div class="failed"><strong>{{ failedCount }}</strong><span>解析失败</span></div></div>
+        <div class="card-title"><h2>批次结果</h2><el-tag v-if="isUploading" type="warning">处理中</el-tag><el-tag v-else-if="(hasFiles || hasBatch) && successCount + failedCount === totalCount" :type="failedCount ? 'danger' : 'success'">{{ failedCount ? '部分失败' : '已完成' }}</el-tag><el-tag v-else type="info">未开始</el-tag></div>
+        <div class="metrics"><div><strong>{{ totalCount }}</strong><span>文件总数</span></div><div class="success"><strong>{{ successCount }}</strong><span>解析成功</span></div><div class="failed"><strong>{{ failedCount }}</strong><span>解析失败</span></div></div>
         <el-alert v-if="failedCount" title="部分文件未能完成解析" type="warning" :closable="false" show-icon description="请检查失败原因，修正文件后重新上传。" />
-        <div v-else class="empty-result"><div class="empty-icon">✓</div><strong>上传后查看处理结果</strong><p>系统会逐个提取发票信息，并根据商品单价规则生成预审结果。</p></div>
+        <div v-else-if="!hasBatch" class="empty-result"><div class="empty-icon">✓</div><strong>上传后查看处理结果</strong><p>系统会逐个提取发票信息，并根据商品单价规则生成预审结果。</p></div>
+        <div v-else class="empty-result"><div class="empty-icon">✓</div><strong>已恢复最近上传批次</strong><p>批次 {{ batchId }} 的处理结果已从服务器重新加载。</p></div>
       </el-card>
     </div>
   </section>

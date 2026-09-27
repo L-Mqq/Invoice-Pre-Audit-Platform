@@ -239,7 +239,20 @@ async function getUploadBatch(batchId) {
     items: itemsByInvoiceId.get(row.invoice_id) || [],
   }))
 
-  return { ...batch, files }
+  return {
+    id: batch.id,
+    originalName: batch.original_name,
+    fileType: batch.file_type,
+    status: batch.status,
+    totalCount: batch.total_count,
+    successCount: batch.success_count,
+    failedCount: batch.failed_count,
+    errorMessage: batch.error_message,
+    createdBy: batch.created_by,
+    createdAt: batch.created_at,
+    updatedAt: batch.updated_at,
+    files,
+  }
 }
 
 // 逐个处理
