@@ -22,6 +22,27 @@ async function findByBatchId(batchId) {
   return rows
 }
 
+// 新增批次文件与发票关联查询；
+async function findDetailsByBatchId(batchId) {
+  const [rows] = await pool.execute(
+    `SELECT f.id AS file_id, f.batch_id, f.invoice_id, f.original_name,
+       f.storage_key, f.mime_type, f.file_size, f.sha256,
+       f.extraction_status, f.extraction_error,
+       f.created_at AS file_created_at, f.updated_at AS file_updated_at,
+       i.invoice_number, i.invoice_date, i.seller_name, i.seller_tax_id,
+       i.total_amount, i.submitted_at, i.qualification_status,
+       i.qualification_reason, i.cumulative_amount, i.cumulative_week_start,
+       i.finance_status, i.reimbursement_status, i.manual_note,
+       i.created_at AS invoice_created_at, i.updated_at AS invoice_updated_at
+     FROM invoice_files f
+     INNER JOIN invoices i ON i.id = f.invoice_id
+     WHERE f.batch_id = ?
+     ORDER BY f.id`,
+    [batchId],
+  )
+  return rows
+}
+
 // 更新提取状态
 async function updateExtractionStatus({ connection = pool, id, status, error = null }) {
   await connection.execute(
@@ -30,4 +51,4 @@ async function updateExtractionStatus({ connection = pool, id, status, error = n
   )
 }
 
-module.exports = { createFile, findByBatchId, updateExtractionStatus }
+module.exports = { createFile, findByBatchId, findDetailsByBatchId, updateExtractionStatus }

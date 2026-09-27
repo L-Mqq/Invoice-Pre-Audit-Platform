@@ -53,6 +53,22 @@ async function createItems({ connection = pool, invoiceId, items }) {
   return createdItems
 }
 
+// 新增按多个 invoiceId 批量查询商品明细；
+async function findItemsByInvoiceIds(invoiceIds) {
+  if (!Array.isArray(invoiceIds) || invoiceIds.length === 0) return []
+  const placeholders = invoiceIds.map(() => '?').join(', ')
+  const [rows] = await pool.execute(
+    `SELECT id, invoice_id, item_name, quantity, unit_price, price_type,
+       line_amount, ai_category_result, manual_category_result,
+       final_category_result, category_reason, created_at, updated_at
+     FROM invoice_items
+     WHERE invoice_id IN (${placeholders})
+     ORDER BY invoice_id, id`,
+    invoiceIds,
+  )
+  return rows
+}
+
 async function updateQualificationByCategory({ connection = pool, id, categoryResult, reason }) {
   if (categoryResult === '可以') return
   await connection.execute(
@@ -109,4 +125,4 @@ async function markExtractionFailure({ connection = pool, id, error }) {
   )
 }
 
-module.exports = { createDraft, updateExtractionResult, createItems, updateQualificationByCategory, updateItemPriceType, updateQualificationByPrice, markExtractionFailure }
+module.exports = { createDraft, updateExtractionResult, createItems, findItemsByInvoiceIds, updateQualificationByCategory, updateItemPriceType, updateQualificationByPrice, markExtractionFailure }

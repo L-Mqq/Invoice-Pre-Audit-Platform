@@ -173,9 +173,72 @@ async function createUploadBatch({ files, createdBy = null }) {
 
 // 获取批次信息
 async function getUploadBatch(batchId) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(batchId))) {
+    const error = new Error('batchId invalid')
+    error.statusCode = 400
+    error.expose = true
+    throw error
+  }
   const batch = await uploadBatchRepository.findById(batchId)
   if (!batch) { const error = new Error('上传批次不存在'); error.statusCode = 404; error.expose = true; throw error }
-  const files = await invoiceFileRepository.findByBatchId(batchId)
+  const detailRows = await invoiceFileRepository.findDetailsByBatchId(batchId)
+  const invoiceIds = detailRows.map((row) => row.invoice_id)
+  const itemRows = await invoiceRepository.findItemsByInvoiceIds(invoiceIds)
+  const itemsByInvoiceId = new Map()
+
+  for (const item of itemRows) {
+    const items = itemsByInvoiceId.get(item.invoice_id) || []
+    items.push({
+      id: item.id,
+      invoiceId: item.invoice_id,
+      itemName: item.item_name,
+      quantity: item.quantity,
+      unitPrice: item.unit_price,
+      priceType: item.price_type,
+      lineAmount: item.line_amount,
+      aiCategoryResult: item.ai_category_result,
+      manualCategoryResult: item.manual_category_result,
+      finalCategoryResult: item.final_category_result,
+      categoryReason: item.category_reason,
+      createdAt: item.created_at,
+      updatedAt: item.updated_at,
+    })
+    itemsByInvoiceId.set(item.invoice_id, items)
+  }
+
+  const files = detailRows.map((row) => ({
+    id: row.file_id,
+    batchId: row.batch_id,
+    invoiceId: row.invoice_id,
+    originalName: row.original_name,
+    storageKey: row.storage_key,
+    mimeType: row.mime_type,
+    fileSize: row.file_size,
+    sha256: row.sha256,
+    extractionStatus: row.extraction_status,
+    extractionError: row.extraction_error,
+    createdAt: row.file_created_at,
+    updatedAt: row.file_updated_at,
+    invoice: {
+      invoiceNumber: row.invoice_number,
+      invoiceDate: row.invoice_date,
+      sellerName: row.seller_name,
+      sellerTaxId: row.seller_tax_id,
+      totalAmount: row.total_amount,
+      submittedAt: row.submitted_at,
+      qualificationStatus: row.qualification_status,
+      qualificationReason: row.qualification_reason,
+      cumulativeAmount: row.cumulative_amount,
+      cumulativeWeekStart: row.cumulative_week_start,
+      financeStatus: row.finance_status,
+      reimbursementStatus: row.reimbursement_status,
+      manualNote: row.manual_note,
+      createdAt: row.invoice_created_at,
+      updatedAt: row.invoice_updated_at,
+    },
+    items: itemsByInvoiceId.get(row.invoice_id) || [],
+  }))
+
   return { ...batch, files }
 }
 
