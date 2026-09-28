@@ -7,7 +7,7 @@ import InvoicesDetail from '../views/Invoices/InvoicesDetail.vue'
 import InvoicesUpload from '../views/Invoices/InvoicesUpload.vue'
 import ProgressCard from '../views/Invoices/ProgressCard.vue'
 import Rules from '../views/Rule/Rules.vue'
-import { getToken } from '../utils/token'
+import { useAuthStore } from '../stores/auth'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -28,9 +28,52 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to) => {
-  if (to.meta.requiresAuth && !getToken()) return { name: 'auth', replace: true }
-  if (to.name === 'auth' && getToken()) return { name: 'layout', replace: true }
+router.beforeEach(async (to) => {
+  const authStore = useAuthStore()
+
+  if (to.name === 'auth') {
+    if (!authStore.isAuthenticated) {
+      return true
+    }
+
+    if (!authStore.user) {
+      const restored = await authStore.restoreSession()
+
+      if (!restored) {
+        return true
+      }
+    }
+
+    return {
+      name: 'layout',
+      replace: true,
+    }
+  }
+
+  if (!to.meta.requiresAuth) {
+    return true
+  }
+
+  if (!authStore.isAuthenticated) {
+    return {
+      name: 'auth',
+      replace: true,
+    }
+  }
+
+  if (authStore.user) {
+    return true
+  }
+
+  const restored = await authStore.restoreSession()
+  if (restored) {
+    return true
+  }
+
+  return {
+    name: 'auth',
+    replace: true,
+  }
 })
 
 export default router

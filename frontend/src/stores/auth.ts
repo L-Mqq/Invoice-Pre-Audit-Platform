@@ -13,7 +13,8 @@ export const useAuthStore = defineStore('auth', () => {
   function login(nextToken: string, nextUser: AuthUser) { 
           setToken(nextToken); 
           token.value = nextToken;
-          user.value = nextUser }
+          user.value = nextUser 
+        }
   
   function logout() { 
           clearToken(); 
@@ -21,7 +22,8 @@ export const useAuthStore = defineStore('auth', () => {
           user.value = null 
       }
 
-
+    //如果本地有token，则通过后端的请求获取登录者的信息
+    //放在路由守卫，刷新切换页面时都会恢复当前登陆者的信息
     async function restoreSession() {
     if (!token.value) return false
     try {

@@ -71,4 +71,164 @@ async function reviewItemCategory({ connection = pool, itemId, result, note, ope
   }
 }
 
-module.exports = { reviewItemCategory }
+async function findInvoiceForQualificationReview({
+  connection = pool,
+  invoiceId,
+}) {
+  const [rows] = await connection.execute(
+    `SELECT
+       id,
+       seller_tax_id,
+       total_amount,
+       submitted_at,
+       qualification_status,
+       qualification_reason,
+       cumulative_amount,
+       cumulative_week_start,
+       manual_note
+     FROM invoices
+     WHERE id = ?
+     FOR UPDATE`,
+    [invoiceId],
+  )
+
+  return rows[0] || null
+}
+
+async function findItemsForQualificationReview({
+  connection = pool,
+  invoiceId,
+}) {
+  const [rows] = await connection.execute(
+    `SELECT
+       id,
+       item_name,
+       unit_price,
+       price_type,
+       final_category_result,
+       category_reason
+     FROM invoice_items
+     WHERE invoice_id = ?
+     ORDER BY id
+     FOR UPDATE`,
+    [invoiceId],
+  )
+
+  return rows
+}
+
+async function getWeekStart({
+  connection = pool,
+  date,
+}) {
+  const [rows] = await connection.execute(
+    `SELECT DATE_SUB(
+       DATE(?),
+       INTERVAL WEEKDAY(DATE(?)) DAY
+     ) AS week_start`,
+    [date, date],
+  )
+
+  return rows[0].week_start
+}
+
+async function findApprovedInvoicesForWeek({
+  connection = pool,
+  invoiceId,
+  sellerTaxId,
+  weekStart,
+}) {
+  const [rows] = await connection.execute(
+    `SELECT
+       id,
+       total_amount
+     FROM invoices
+     WHERE seller_tax_id = ?
+       AND cumulative_week_start = ?
+       AND qualification_status = 'approved'
+       AND id <> ?
+     FOR UPDATE`,
+    [sellerTaxId, weekStart, invoiceId],
+  )
+
+  return rows
+}
+
+async function updateInvoiceQualificationReview({
+  connection = pool,
+  invoiceId,
+  qualificationStatus,
+  qualificationReason,
+  cumulativeAmount,
+  cumulativeWeekStart,
+  submittedAt,
+  manualNote,
+}) {
+  await connection.execute(
+    `UPDATE invoices
+     SET qualification_status = ?,
+         qualification_reason = ?,
+         cumulative_amount = ?,
+         cumulative_week_start = ?,
+         submitted_at = CASE
+           WHEN ? IS NULL THEN submitted_at
+           ELSE COALESCE(submitted_at, ?)
+         END,
+         manual_note = ?
+     WHERE id = ?`,
+    [
+      qualificationStatus,
+      qualificationReason,
+      cumulativeAmount,
+      cumulativeWeekStart,
+      submittedAt,
+      submittedAt,
+      manualNote,
+      invoiceId,
+    ],
+  )
+}
+
+async function createQualificationReviewLog({
+  connection = pool,
+  operatorId,
+  invoiceId,
+  beforeData,
+  afterData,
+}) {
+  await connection.execute(
+    `INSERT INTO operation_logs
+      (
+        operator_id,
+        operation_type,
+        resource_type,
+        resource_id,
+        before_data,
+        after_data
+      )
+     VALUES (
+       ?,
+       'qualification_review',
+       'invoice',
+       ?,
+       ?,
+       ?
+     )`,
+    [
+      operatorId,
+      invoiceId,
+      JSON.stringify(beforeData),
+      JSON.stringify(afterData),
+    ],
+  )
+}
+
+module.exports = {
+  reviewItemCategory,
+  findInvoiceForQualificationReview,
+  findItemsForQualificationReview,
+  getWeekStart,
+  findApprovedInvoicesForWeek,
+  updateInvoiceQualificationReview,
+  createQualificationReviewLog,
+}
