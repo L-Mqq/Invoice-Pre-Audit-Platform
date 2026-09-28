@@ -1,72 +1,521 @@
 <script setup lang="ts">
-import { useRouter } from 'vue-router'
+import { computed, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
+import { useRoute, useRouter } from 'vue-router'
+import {
+  getInvoiceDetail,
+  type InvoiceDetail,
+  type InvoiceDetailFile,
+  type InvoiceDetailItem,
+} from '../../apis/invoices'
+import {
+  downloadInvoiceFile,
+  previewInvoiceFile,
+} from '../../apis/invoiceFile'
 import {
   getFinanceStatusLabel,
   getQualificationStatusLabel,
   getReimbursementStatusLabel,
 } from '../../utils/status'
 
+const route = useRoute()
 const router = useRouter()
 
-const invoice = {
-  id: 1,
-  invoiceNumber: '031002100111',
-  invoiceDate: '2026-09-26',
-  sellerName: '上海示例材料有限公司',
-  sellerTaxId: '91310000MA1K12345X',
-  totalAmount: 860,
-  originalName: '1pass.pdf',
-  batchId: '3f0108c5-9cea-4548-8182-0984948c85a5',
-  createdAt: '2026-09-26 14:32:08',
-  qualificationStatus: 'pending_manual',
-  financeStatus: 'not_submitted',
-  reimbursementStatus: 'not_completed',
-  qualificationReason: '商品品类存在存疑项目，需要管理员人工确认。',
+const invoiceDetail = ref<InvoiceDetail | null>(null)
+const selectedFileId = ref<number | null>(null)
+const loading = ref(false)
+const loadError = ref('')
+const previewing = ref(false)
+const downloading = ref(false)
+
+const selectedFile = computed<InvoiceDetailFile | null>(() => {
+  if (!invoiceDetail.value || selectedFileId.value === null) {
+    return null
+  }
+
+  return invoiceDetail.value.files.find(
+    (file) => file.id === selectedFileId.value,
+  ) || null
+})
+
+const firstItemReason = computed(() => {
+  return invoiceDetail.value?.items[0]?.categoryReason || '暂无判断依据'
+})
+
+function getRouteInvoiceId(): number | null {
+  const value = route.params.invoiceId
+  const rawInvoiceId = Array.isArray(value) ? value[0] : value
+  const invoiceId = Number(rawInvoiceId)
+
+  if (!Number.isSafeInteger(invoiceId) || invoiceId <= 0) {
+    return null
+  }
+
+  return invoiceId
 }
 
-const items = [
-  {
-    id: 1,
-    name: '建筑用钢材',
-    quantity: 2,
-    unitPrice: 430,
-    amount: 860,
-    priceType: 'material',
-    categoryResult: '存疑',
-    reason: '商品名称与长期品类规则未完全匹配。',
-  },
-]
-const firstItem = items[0]
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message
+  }
+
+  return '获取发票详情失败'
+}
+
+function formatAmount(amount: number | string | null): string {
+  return `¥${Number(amount || 0).toFixed(2)}`
+}
+
+function getPriceTypeLabel(priceType: InvoiceDetailItem['priceType']): string {
+  const labels = {
+    material: '材料',
+    low_value: '低值品',
+    asset: '资产',
+  }
+
+  return priceType ? labels[priceType] : '待判断'
+}
+
+function getCategoryResult(item: InvoiceDetailItem): string {
+  return item.finalCategoryResult || item.manualCategoryResult || item.aiCategoryResult || '待判断'
+}
+
+function getExtractionStatusLabel(status: InvoiceDetailFile['extractionStatus']): string {
+  const labels = {
+    pending: '处理中',
+    success: '解析成功',
+    failed: '解析失败',
+  }
+
+  return labels[status]
+}
+
+function getExtractionStatusType(status: InvoiceDetailFile['extractionStatus']) {
+  const types = {
+    pending: 'warning',
+    success: 'success',
+    failed: 'danger',
+  } as const
+
+  return types[status]
+}
 
 function goBack() {
-  router.push({ name: 'invoice-list' })
+  router.push({
+    name: 'invoice-list',
+  })
 }
 
-function formatAmount(amount: number) {
-  return `¥${amount.toFixed(2)}`
+async function loadInvoiceDetail() {
+  const invoiceId = getRouteInvoiceId()
+
+  invoiceDetail.value = null
+  selectedFileId.value = null
+  loadError.value = ''
+
+  if (!invoiceId) {
+    loadError.value = '发票 ID 无效'
+    return
+  }
+
+  loading.value = true
+
+  try {
+    const detail = await getInvoiceDetail(invoiceId)
+
+    invoiceDetail.value = detail
+    selectedFileId.value = detail.files[0]?.id || null
+  } catch (error) {
+    loadError.value = getErrorMessage(error)
+  } finally {
+    loading.value = false
+  }
 }
+
+async function previewSelectedFile() {
+  if (!selectedFile.value) {
+    ElMessage.warning('暂无可预览的原始文件')
+    return
+  }
+
+  const previewWindow = window.open('', '_blank')
+  if (!previewWindow) {
+    ElMessage.warning('浏览器阻止了预览窗口，请允许打开新标签页后重试')
+    return
+  }
+
+  previewing.value = true
+
+  try {
+    const fileBlob = await previewInvoiceFile(selectedFile.value.id)
+    const previewUrl = URL.createObjectURL(fileBlob)
+
+    previewWindow.location.href = previewUrl
+    window.setTimeout(() => {
+      URL.revokeObjectURL(previewUrl)
+    }, 60_000)
+  } catch (error) {
+    previewWindow.close()
+    ElMessage.error(getErrorMessage(error))
+  } finally {
+    previewing.value = false
+  }
+}
+
+async function downloadSelectedFile() {
+  if (!selectedFile.value) {
+    ElMessage.warning('暂无可下载的原始文件')
+    return
+  }
+
+  downloading.value = true
+
+  try {
+    const fileBlob = await downloadInvoiceFile(selectedFile.value.id)
+    const downloadUrl = URL.createObjectURL(fileBlob)
+    const link = document.createElement('a')
+
+    link.href = downloadUrl
+    link.download = selectedFile.value.originalName
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(downloadUrl)
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error))
+  } finally {
+    downloading.value = false
+  }
+}
+
+watch(
+  () => route.params.invoiceId,
+  () => {
+    loadInvoiceDetail()
+  },
+  {
+    immediate: true,
+  },
+)
 </script>
 
 <template>
-  <section class="detail-page">
+  <section
+    v-loading="loading"
+    class="detail-page"
+  >
     <div class="page-heading">
-      <div><el-button link type="primary" @click="goBack">← 返回发票列表</el-button><p class="eyebrow">INVOICE DETAIL</p><h1>发票详情</h1><p class="subtitle">查看发票识别信息、商品预审结果和处理状态。</p></div>
-      <div class="heading-actions"><el-button>下载发票</el-button><el-button type="primary">预览 PDF</el-button></div>
-    </div>
-
-    <div class="status-strip"><div><span>资质审核</span><el-tag type="warning">{{ getQualificationStatusLabel(invoice.qualificationStatus) }}</el-tag></div><div><span>财务提交</span><el-tag effect="plain">{{ getFinanceStatusLabel(invoice.financeStatus) }}</el-tag></div><div><span>最终报销</span><el-tag effect="plain">{{ getReimbursementStatusLabel(invoice.reimbursementStatus) }}</el-tag></div></div>
-
-    <div class="detail-grid">
-      <div class="main-column">
-        <el-card shadow="never" class="detail-card"><div class="card-title"><h2>发票基础信息</h2><el-tag type="success" effect="plain">识别成功</el-tag></div><div class="info-grid"><div><span>发票号码</span><strong>{{ invoice.invoiceNumber }}</strong></div><div><span>开票日期</span><strong>{{ invoice.invoiceDate }}</strong></div><div><span>销售方名称</span><strong>{{ invoice.sellerName }}</strong></div><div><span>销售方税号</span><strong>{{ invoice.sellerTaxId }}</strong></div><div><span>价税合计</span><strong class="amount">{{ formatAmount(invoice.totalAmount) }}</strong></div><div><span>原始文件</span><strong>{{ invoice.originalName }}</strong></div><div><span>上传批次</span><strong class="muted-value">{{ invoice.batchId }}</strong></div><div><span>上传时间</span><strong>{{ invoice.createdAt }}</strong></div></div></el-card>
-
-        <el-card shadow="never" class="detail-card"><div class="card-title"><h2>商品明细</h2><span class="card-caption">{{ items.length }} 个商品</span></div><el-table :data="items" stripe><el-table-column prop="name" label="商品名称" min-width="170" /><el-table-column prop="quantity" label="数量" width="80" /><el-table-column label="含税单价" width="120"><template #default="{ row }">{{ formatAmount(row.unitPrice) }}</template></el-table-column><el-table-column label="明细金额" width="120"><template #default="{ row }">{{ formatAmount(row.amount) }}</template></el-table-column><el-table-column label="单价分类" width="110"><template #default="{ row }"><el-tag effect="plain">{{ row.priceType === 'material' ? '材料' : row.priceType === 'low_value' ? '低值品' : '资产' }}</el-tag></template></el-table-column><el-table-column label="品类结果" width="100"><template #default="{ row }"><el-tag type="warning" effect="plain">{{ row.categoryResult }}</el-tag></template></el-table-column></el-table><div class="reason-row"><span>判断依据</span><p>{{ firstItem?.reason || '暂无判断依据' }}</p></div></el-card>
-
-        <el-card shadow="never" class="detail-card"><div class="card-title"><h2>预审结果</h2><el-tag type="warning">待人工处理</el-tag></div><div class="review-result"><div><span>品类判断</span><strong>存疑</strong></div><div><span>单价判断</span><strong class="success-text">材料</strong></div><div><span>自然周累计</span><strong>{{ formatAmount(860) }}</strong></div><div><span>累计所属周</span><strong>2026-09-21 至 2026-09-27</strong></div></div><el-alert title="商品品类存在存疑项目，需要管理员人工确认。" type="warning" :closable="false" show-icon /></el-card>
+      <div>
+        <el-button
+          link
+          type="primary"
+          @click="goBack"
+        >
+          ← 返回发票列表
+        </el-button>
+        <p class="eyebrow">INVOICE DETAIL</p>
+        <h1>发票详情</h1>
+        <p class="subtitle">查看发票识别信息、商品预审结果和处理状态。</p>
       </div>
 
-      <aside class="side-column"><el-card shadow="never" class="preview-card"><div class="card-title"><h2>原始发票</h2><el-button link type="primary">放大预览</el-button></div><div class="pdf-placeholder"><div class="pdf-icon">PDF</div><strong>{{ invoice.originalName }}</strong><span>点击预览查看原始发票</span><el-button type="primary" plain>预览文件</el-button></div></el-card><el-card shadow="never" class="detail-card"><div class="card-title"><h2>管理员操作</h2></div><el-button type="primary" class="full-button">审核通过</el-button><el-button class="full-button">标记待补凭证</el-button><el-button type="danger" plain class="full-button">审核不通过</el-button><el-input class="note-input" type="textarea" :rows="3" placeholder="填写人工处理备注" /><el-button class="full-button">保存备注</el-button></el-card><el-card shadow="never" class="detail-card"><div class="card-title"><h2>处理记录</h2></div><el-timeline><el-timeline-item timestamp="2026-09-26 14:32" type="primary">文件上传并完成识别</el-timeline-item><el-timeline-item timestamp="2026-09-26 14:33">规则引擎完成初步预审</el-timeline-item><el-timeline-item timestamp="等待处理">等待管理员审核</el-timeline-item></el-timeline></el-card></aside>
+      <div class="heading-actions">
+        <el-button
+          :disabled="!selectedFile"
+          :loading="downloading"
+          @click="downloadSelectedFile"
+        >
+          下载发票
+        </el-button>
+        <el-button
+          type="primary"
+          :disabled="!selectedFile"
+          :loading="previewing"
+          @click="previewSelectedFile"
+        >
+          预览 PDF
+        </el-button>
+      </div>
     </div>
+
+    <el-alert
+      v-if="loadError"
+      class="load-error"
+      :title="loadError"
+      type="error"
+      show-icon
+      :closable="false"
+    >
+      <template #default>
+        <el-button
+          link
+          type="primary"
+          @click="loadInvoiceDetail"
+        >
+          重新加载
+        </el-button>
+      </template>
+    </el-alert>
+
+    <template v-else-if="invoiceDetail">
+      <div class="status-strip">
+        <div>
+          <span>资质审核</span>
+          <el-tag type="warning">
+            {{ getQualificationStatusLabel(invoiceDetail.qualificationStatus) }}
+          </el-tag>
+        </div>
+        <div>
+          <span>财务提交</span>
+          <el-tag effect="plain">
+            {{ getFinanceStatusLabel(invoiceDetail.financeStatus) }}
+          </el-tag>
+        </div>
+        <div>
+          <span>最终报销</span>
+          <el-tag effect="plain">
+            {{ getReimbursementStatusLabel(invoiceDetail.reimbursementStatus) }}
+          </el-tag>
+        </div>
+      </div>
+
+      <div class="detail-grid">
+        <div class="main-column">
+          <el-card
+            shadow="never"
+            class="detail-card"
+          >
+            <div class="card-title">
+              <h2>发票基础信息</h2>
+              <el-tag
+                :type="selectedFile ? getExtractionStatusType(selectedFile.extractionStatus) : 'info'"
+                effect="plain"
+              >
+                {{ selectedFile ? getExtractionStatusLabel(selectedFile.extractionStatus) : '无关联文件' }}
+              </el-tag>
+            </div>
+
+            <div class="info-grid">
+              <div>
+                <span>发票号码</span>
+                <strong>{{ invoiceDetail.invoiceNumber || '未识别' }}</strong>
+              </div>
+              <div>
+                <span>开票日期</span>
+                <strong>{{ invoiceDetail.invoiceDate || '未识别' }}</strong>
+              </div>
+              <div>
+                <span>销售方名称</span>
+                <strong>{{ invoiceDetail.sellerName || '未识别' }}</strong>
+              </div>
+              <div>
+                <span>销售方税号</span>
+                <strong>{{ invoiceDetail.sellerTaxId || '未识别' }}</strong>
+              </div>
+              <div>
+                <span>价税合计</span>
+                <strong class="amount">{{ formatAmount(invoiceDetail.totalAmount) }}</strong>
+              </div>
+              <div>
+                <span>上传批次</span>
+                <strong class="muted-value">{{ invoiceDetail.sourceBatchId || '无' }}</strong>
+              </div>
+              <div>
+                <span>上传时间</span>
+                <strong>{{ invoiceDetail.createdAt }}</strong>
+              </div>
+              <div>
+                <span>提交审核时间</span>
+                <strong>{{ invoiceDetail.submittedAt || '尚未提交' }}</strong>
+              </div>
+            </div>
+          </el-card>
+
+          <el-card
+            shadow="never"
+            class="detail-card"
+          >
+            <div class="card-title">
+              <h2>商品明细</h2>
+              <span class="card-caption">{{ invoiceDetail.items.length }} 个商品</span>
+            </div>
+
+            <el-table
+              :data="invoiceDetail.items"
+              stripe
+              empty-text="暂无商品明细"
+            >
+              <el-table-column
+                prop="itemName"
+                label="商品名称"
+                min-width="170"
+              />
+              <el-table-column
+                prop="quantity"
+                label="数量"
+                width="80"
+              />
+              <el-table-column
+                label="含税单价"
+                width="120"
+              >
+                <template #default="{ row }">
+                  {{ formatAmount(row.unitPrice) }}
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="明细金额"
+                width="120"
+              >
+                <template #default="{ row }">
+                  {{ formatAmount(row.lineAmount) }}
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="单价分类"
+                width="110"
+              >
+                <template #default="{ row }">
+                  <el-tag effect="plain">
+                    {{ getPriceTypeLabel(row.priceType) }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column
+                label="品类结果"
+                width="100"
+              >
+                <template #default="{ row }">
+                  <el-tag
+                    type="warning"
+                    effect="plain"
+                  >
+                    {{ getCategoryResult(row) }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+            </el-table>
+
+            <div class="reason-row">
+              <span>判断依据</span>
+              <p>{{ firstItemReason }}</p>
+            </div>
+          </el-card>
+
+          <el-card
+            shadow="never"
+            class="detail-card"
+          >
+            <div class="card-title">
+              <h2>预审结果</h2>
+              <el-tag type="warning">
+                {{ getQualificationStatusLabel(invoiceDetail.qualificationStatus) }}
+              </el-tag>
+            </div>
+
+            <div class="review-result">
+              <div>
+                <span>预审原因</span>
+                <strong>{{ invoiceDetail.qualificationReason || '暂无预审结论' }}</strong>
+              </div>
+              <div>
+                <span>自然周累计</span>
+                <strong>{{ formatAmount(invoiceDetail.cumulativeAmount) }}</strong>
+              </div>
+              <div>
+                <span>累计所属周</span>
+                <strong>{{ invoiceDetail.cumulativeWeekStart || '尚未计算' }}</strong>
+              </div>
+              <div>
+                <span>人工处理备注</span>
+                <strong>{{ invoiceDetail.manualNote || '暂无备注' }}</strong>
+              </div>
+            </div>
+          </el-card>
+        </div>
+
+        <aside class="side-column">
+          <el-card
+            shadow="never"
+            class="preview-card"
+          >
+            <div class="card-title">
+              <h2>原始发票</h2>
+              <el-button
+                link
+                type="primary"
+                :disabled="!selectedFile"
+                @click="previewSelectedFile"
+              >
+                放大预览
+              </el-button>
+            </div>
+
+            <el-select
+              v-if="invoiceDetail.files.length > 1"
+              v-model="selectedFileId"
+              class="file-selector"
+              placeholder="选择原始文件"
+            >
+              <el-option
+                v-for="file in invoiceDetail.files"
+                :key="file.id"
+                :label="file.originalName"
+                :value="file.id"
+              />
+            </el-select>
+
+            <div class="pdf-placeholder">
+              <div class="pdf-icon">PDF</div>
+              <strong>{{ selectedFile?.originalName || '暂无关联文件' }}</strong>
+              <span>{{ selectedFile ? '点击预览查看原始发票' : '该发票暂未关联可预览文件' }}</span>
+              <el-button
+                type="primary"
+                plain
+                :disabled="!selectedFile"
+                :loading="previewing"
+                @click="previewSelectedFile"
+              >
+                预览文件
+              </el-button>
+            </div>
+          </el-card>
+
+          <el-card
+            shadow="never"
+            class="detail-card"
+          >
+            <div class="card-title">
+              <h2>关联文件</h2>
+              <span class="card-caption">{{ invoiceDetail.files.length }} 个文件</span>
+            </div>
+
+            <el-empty
+              v-if="invoiceDetail.files.length === 0"
+              description="暂无关联文件"
+              :image-size="72"
+            />
+            <template v-else>
+              <div
+                v-for="file in invoiceDetail.files"
+                :key="file.id"
+                class="file-row"
+              >
+                <div>
+                  <strong>{{ file.originalName }}</strong>
+                  <span>{{ file.fileSize }} 字节</span>
+                </div>
+                <el-tag
+                  :type="getExtractionStatusType(file.extractionStatus)"
+                  effect="plain"
+                >
+                  {{ getExtractionStatusLabel(file.extractionStatus) }}
+                </el-tag>
+              </div>
+            </template>
+          </el-card>
+        </aside>
+      </div>
+    </template>
   </section>
 </template>
 
@@ -91,7 +540,7 @@ function formatAmount(amount: number) {
   color: #2563eb;
   font-size: 11px;
   font-weight: 700;
-  letter-spacing: .14em;
+  letter-spacing: 0.14em;
 }
 
 .page-heading h1 {
@@ -126,6 +575,10 @@ function formatAmount(amount: number) {
   text-align: center;
 }
 
+.load-error {
+  margin-bottom: 20px;
+}
+
 .status-strip {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -152,7 +605,7 @@ function formatAmount(amount: number) {
 
 .detail-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.6fr) minmax(300px, .8fr);
+  grid-template-columns: minmax(0, 1.6fr) minmax(300px, 0.8fr);
   gap: 20px;
 }
 
@@ -173,6 +626,7 @@ function formatAmount(amount: number) {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   margin-bottom: 18px;
 }
 
@@ -240,7 +694,6 @@ function formatAmount(amount: number) {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 16px;
-  margin-bottom: 18px;
 }
 
 .review-result div {
@@ -250,15 +703,18 @@ function formatAmount(amount: number) {
 }
 
 .review-result strong {
-  font-size: 15px;
+  color: #334155;
+  font-size: 14px;
+  line-height: 1.6;
 }
 
-.success-text {
-  color: #16a34a;
+.file-selector {
+  width: 100%;
+  margin-bottom: 12px;
 }
 
 .pdf-placeholder {
-  min-height: 350px;
+  min-height: 300px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -290,17 +746,36 @@ function formatAmount(amount: number) {
   font-size: 12px;
 }
 
-.full-button {
-  width: 100%;
-  margin: 0 0 10px;
+.file-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid #f1f5f9;
 }
 
-.note-input {
-  margin: 5px 0 10px;
+.file-row:last-child {
+  border-bottom: 0;
 }
 
-.side-column :deep(.el-timeline) {
-  padding-left: 4px;
+.file-row > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.file-row strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.file-row span {
+  color: #94a3b8;
+  font-size: 12px;
 }
 
 @media (max-width: 900px) {
@@ -324,11 +799,9 @@ function formatAmount(amount: number) {
     width: 100%;
   }
 
-  .status-strip {
-    grid-template-columns: 1fr;
-  }
-
-  .info-grid {
+  .status-strip,
+  .info-grid,
+  .review-result {
     grid-template-columns: 1fr;
   }
 }

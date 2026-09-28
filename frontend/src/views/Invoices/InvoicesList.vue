@@ -51,6 +51,15 @@ function goToUpload() {
   router.push({ name: 'upload-invoice' })
 }
 
+function goToDetail(invoice: InvoiceRow) {
+  router.push({
+    name: 'invoice-detail',
+    params: {
+      invoiceId: invoice.id,
+    },
+  })
+}
+
 async function loadInvoices() {
   loading.value = true
   loadError.value = ''
@@ -126,7 +135,21 @@ onMounted(loadInvoices)
         <el-table-column label="资质审核" width="130"><template #default="{ row }"><el-tag effect="plain">{{ getQualificationStatusLabel(row.qualificationStatus) }}</el-tag></template></el-table-column>
         <el-table-column label="财务提交" width="110"><template #default="{ row }">{{ getFinanceStatusLabel(row.financeStatus) }}</template></el-table-column>
         <el-table-column label="报销状态" width="110"><template #default="{ row }">{{ getReimbursementStatusLabel(row.reimbursementStatus) }}</template></el-table-column>
-        <el-table-column label="操作" width="100" fixed="right"><template #default><el-button link type="primary">查看详情</el-button></template></el-table-column>
+        <el-table-column
+          label="操作"
+          width="100"
+          fixed="right"
+        >
+          <template #default="{ row }">
+            <el-button
+              link
+              type="primary"
+              @click="goToDetail(row)"
+            >
+              查看详情
+            </el-button>
+          </template>
+        </el-table-column>
       </el-table>
       <div class="pagination"><span>第 {{ page }} 页</span><el-pagination background layout="prev, pager, next" :current-page="page" :total="total" :page-size="pageSize" @current-change="handlePageChange" /></div>
     </el-card>
