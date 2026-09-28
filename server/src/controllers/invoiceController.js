@@ -9,4 +9,22 @@ async function list(req, res, next) {
   }
 }
 
-module.exports = { list }
+async function getDetail(req, res, next) {
+  try {
+    const result = await invoiceService.getInvoiceDetail(
+      req.params.invoiceId,
+    )
+
+    res.json({
+      success: true,
+      data: result,
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+module.exports = {
+  list,
+  getDetail,
+}

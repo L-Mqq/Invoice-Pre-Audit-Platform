@@ -1,4 +1,5 @@
 const invoiceRepository = require('../repositories/invoiceRepository')
+const invoiceFileRepository = require('../repositories/invoiceFileRepository')
 
 const QUALIFICATION_STATUSES = new Set([
   'pending',
@@ -27,6 +28,26 @@ function parsePositiveInteger(value, fallback) {
 
 function validateStatus(value, allowed, message) {
   if (value !== undefined && !allowed.has(value)) throw badRequest(message)
+}
+
+function parseInvoiceId(value) {
+  if (typeof value !== 'string' || !/^\d+$/.test(value)) {
+    throw badRequest('发票 ID 无效')
+  }
+
+  const invoiceId = Number(value)
+  if (!Number.isSafeInteger(invoiceId) || invoiceId <= 0) {
+    throw badRequest('发票 ID 无效')
+  }
+
+  return invoiceId
+}
+
+function notFound(message) {
+  const error = new Error(message)
+  error.statusCode = 404
+  error.expose = true
+  return error
 }
 
 async function listInvoices(query = {}) {
@@ -85,4 +106,69 @@ async function listInvoices(query = {}) {
   }
 }
 
-module.exports = { listInvoices }
+async function getInvoiceDetail(rawInvoiceId) {
+  const invoiceId = parseInvoiceId(rawInvoiceId)
+  const invoice = await invoiceRepository.findById(invoiceId)
+
+  if (!invoice) {
+    throw notFound('发票不存在')
+  }
+
+  const [items, files] = await Promise.all([
+    invoiceRepository.findItemsByInvoiceId(invoiceId),
+    invoiceFileRepository.findByInvoiceId(invoiceId),
+  ])
+
+  return {
+    id: invoice.id,
+    invoiceNumber: invoice.invoice_number,
+    invoiceDate: invoice.invoice_date,
+    sellerName: invoice.seller_name,
+    sellerTaxId: invoice.seller_tax_id,
+    totalAmount: invoice.total_amount,
+    submittedAt: invoice.submitted_at,
+    qualificationStatus: invoice.qualification_status,
+    financeStatus: invoice.finance_status,
+    reimbursementStatus: invoice.reimbursement_status,
+    qualificationReason: invoice.qualification_reason,
+    cumulativeAmount: invoice.cumulative_amount,
+    cumulativeWeekStart: invoice.cumulative_week_start,
+    sourceBatchId: invoice.source_batch_id,
+    aiRawResult: invoice.ai_raw_result,
+    manualNote: invoice.manual_note,
+    createdAt: invoice.created_at,
+    updatedAt: invoice.updated_at,
+    items: items.map((item) => ({
+      id: item.id,
+      invoiceId: item.invoice_id,
+      itemName: item.item_name,
+      quantity: item.quantity,
+      unitPrice: item.unit_price,
+      priceType: item.price_type,
+      lineAmount: item.line_amount,
+      aiCategoryResult: item.ai_category_result,
+      manualCategoryResult: item.manual_category_result,
+      finalCategoryResult: item.final_category_result,
+      categoryReason: item.category_reason,
+      createdAt: item.created_at,
+      updatedAt: item.updated_at,
+    })),
+    files: files.map((file) => ({
+      id: file.id,
+      batchId: file.batch_id,
+      invoiceId: file.invoice_id,
+      originalName: file.original_name,
+      mimeType: file.mime_type,
+      fileSize: file.file_size,
+      extractionStatus: file.extraction_status,
+      extractionError: file.extraction_error,
+      createdAt: file.created_at,
+      updatedAt: file.updated_at,
+    })),
+  }
+}
+
+module.exports = {
+  listInvoices,
+  getInvoiceDetail,
+}

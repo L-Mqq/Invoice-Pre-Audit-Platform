@@ -143,6 +143,60 @@ async function findPage({
   }
 }
 
+async function findById(invoiceId) {
+  const [rows] = await pool.execute(
+    `SELECT
+       i.id,
+       i.invoice_number,
+       i.invoice_date,
+       i.seller_name,
+       i.seller_tax_id,
+       i.total_amount,
+       i.submitted_at,
+       i.qualification_status,
+       i.finance_status,
+       i.reimbursement_status,
+       i.qualification_reason,
+       i.cumulative_amount,
+       i.cumulative_week_start,
+       i.source_batch_id,
+       i.ai_raw_result,
+       i.manual_note,
+       i.created_at,
+       i.updated_at
+     FROM invoices i
+     WHERE i.id = ?`,
+    [invoiceId],
+  )
+
+  return rows[0] || null
+}
+
+async function findItemsByInvoiceId(invoiceId) {
+  const [rows] = await pool.execute(
+    `SELECT
+       id,
+       invoice_id,
+       item_name,
+       quantity,
+       unit_price,
+       price_type,
+       line_amount,
+       ai_category_result,
+       manual_category_result,
+       final_category_result,
+       category_reason,
+       created_at,
+       updated_at
+     FROM invoice_items
+     WHERE invoice_id = ?
+     ORDER BY id`,
+    [invoiceId],
+  )
+
+  return rows
+}
+
 async function updateQualificationByCategory({ connection = pool, id, categoryResult, reason }) {
   if (categoryResult === '可以') return
   await connection.execute(
@@ -199,4 +253,16 @@ async function markExtractionFailure({ connection = pool, id, error }) {
   )
 }
 
-module.exports = { createDraft, updateExtractionResult, createItems, findItemsByInvoiceIds, findPage, updateQualificationByCategory, updateItemPriceType, updateQualificationByPrice, markExtractionFailure }
+module.exports = {
+  createDraft,
+  updateExtractionResult,
+  createItems,
+  findItemsByInvoiceIds,
+  findPage,
+  findById,
+  findItemsByInvoiceId,
+  updateQualificationByCategory,
+  updateItemPriceType,
+  updateQualificationByPrice,
+  markExtractionFailure,
+}
