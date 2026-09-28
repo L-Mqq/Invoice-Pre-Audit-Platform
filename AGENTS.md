@@ -116,12 +116,73 @@ project/
 4. 对象字面量每个属性一行
 5. 数组元素多时，每个元素一行
 
-示例：
+### JavaScript
 
 不要写成：
-function foo(a,b){return a+b}
+
+```javascript
+function foo(a, b) {
+  return a + b;
+}
+```
 
 要写成：
+
+```javascript
 function foo(a, b) {
-return a + b
+  return a + b;
 }
+```
+
+### CSS
+
+每个选择器、每个属性单独一行，规则之间空一行。
+
+不要写成：
+
+```css
+.page-heading {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.summary-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+}
+```
+
+要写成：
+
+```css
+.page-heading {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.summary-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+}
+```
+
+### Vue / HTML 模板
+
+不要写成：
+
+```html
+<div class="page">
+  <div class="page-heading"><h1>发票列表</h1></div>
+</div>
+```
+
+要写成：
+
+```html
+<div class="page">
+  <div class="page-heading">
+    <h1>发票列表</h1>
+  </div>
+</div>
+```
