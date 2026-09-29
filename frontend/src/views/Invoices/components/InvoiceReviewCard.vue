@@ -1,0 +1,170 @@
+<script setup lang="ts">
+import type { InvoiceDetail } from '../../../apis/invoices'
+import { getQualificationStatusLabel } from '../../../utils/status'
+
+defineProps<{
+  invoice: InvoiceDetail
+  canSubmitReview: boolean
+  canEnterInvoiceReview: boolean
+  isCategoryEditable: boolean
+  submitReviewLoading: boolean
+}>()
+
+const emit = defineEmits<{
+  submitReview: []
+  enterReview: []
+}>()
+
+function formatAmount(amount: number | string | null): string {
+  return `¥${Number(amount || 0).toFixed(2)}`
+}
+
+function getReviewStatusLabel(invoice: InvoiceDetail): string {
+  if (invoice.qualificationStatus === 'pending' && !invoice.submittedAt) {
+    return '待提交审核'
+  }
+
+  return getQualificationStatusLabel(invoice.qualificationStatus)
+}
+</script>
+
+<template>
+  <el-card
+    shadow="never"
+    class="detail-card"
+  >
+    <div class="card-title">
+      <h2>预审结果</h2>
+      <el-tag type="warning">
+        {{ getReviewStatusLabel(invoice) }}
+      </el-tag>
+    </div>
+
+    <div class="review-result">
+      <div>
+        <span>预审原因</span>
+        <strong>{{ invoice.qualificationReason || '暂无预审结论' }}</strong>
+      </div>
+      <div>
+        <span>自然周累计</span>
+        <strong>{{ formatAmount(invoice.cumulativeAmount) }}</strong>
+      </div>
+      <div>
+        <span>累计所属周</span>
+        <strong>{{ invoice.cumulativeWeekStart || '尚未计算' }}</strong>
+      </div>
+      <div>
+        <span>人工处理备注</span>
+        <strong>{{ invoice.manualNote || '暂无备注' }}</strong>
+      </div>
+    </div>
+
+    <div class="review-actions">
+      <div v-if="canSubmitReview">
+        <strong>提交审核</strong>
+        <span>确认商品品类结果后，提交整张发票进入审核队列。</span>
+      </div>
+      <div v-else-if="canEnterInvoiceReview">
+        <strong>管理员审核</strong>
+        <span>确认整张发票的处理结论。</span>
+      </div>
+      <div v-else-if="isCategoryEditable">
+        <strong>待完成商品确认</strong>
+        <span>请先处理所有“存疑”或未判断的商品品类。</span>
+      </div>
+      <div v-else>
+        <strong>当前无可用审核操作</strong>
+        <span>请根据当前发票状态继续处理。</span>
+      </div>
+      <el-button
+        v-if="canSubmitReview"
+        type="primary"
+        :loading="submitReviewLoading"
+        @click="emit('submitReview')"
+      >
+        提交审核
+      </el-button>
+      <el-button
+        v-else-if="canEnterInvoiceReview"
+        type="primary"
+        @click="emit('enterReview')"
+      >
+        进入审核
+      </el-button>
+    </div>
+  </el-card>
+</template>
+
+<style scoped>
+.detail-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+}
+
+.card-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.card-title h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.review-result {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.review-result div,
+.review-actions > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.review-result span,
+.review-actions span {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.review-result strong,
+.review-actions strong {
+  color: #334155;
+  font-size: 14px;
+}
+
+.review-result strong {
+  line-height: 1.6;
+}
+
+.review-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.review-actions > div {
+  gap: 4px;
+}
+
+@media (max-width: 600px) {
+  .review-result {
+    grid-template-columns: 1fr;
+  }
+
+  .review-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+</style>

@@ -17,11 +17,11 @@ import {
   submitInvoiceForReview,
   type CategoryReviewResult,
 } from '../../apis/invoiceReview'
-import {
-  getFinanceStatusLabel,
-  getQualificationStatusLabel,
-  getReimbursementStatusLabel,
-} from '../../utils/status'
+import InvoiceBasicInfo from './components/InvoiceBasicInfo.vue'
+import InvoiceItemsTable from './components/InvoiceItemsTable.vue'
+import InvoicePreviewCard from './components/InvoicePreviewCard.vue'
+import InvoiceReviewCard from './components/InvoiceReviewCard.vue'
+import InvoiceStatusStrip from './components/InvoiceStatusStrip.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -112,16 +112,6 @@ function formatAmount(amount: number | string | null): string {
   return `¥${Number(amount || 0).toFixed(2)}`
 }
 
-function getPriceTypeLabel(priceType: InvoiceDetailItem['priceType']): string {
-  const labels = {
-    material: '材料',
-    low_value: '低值品',
-    asset: '资产',
-  }
-
-  return priceType ? labels[priceType] : '待判断'
-}
-
 function getCategoryResult(item: InvoiceDetailItem): string {
   return item.finalCategoryResult || item.manualCategoryResult || item.aiCategoryResult || '待判断'
 }
@@ -134,39 +124,8 @@ function getManualCategoryReason(item: InvoiceDetailItem): string {
   return item.manualCategoryReason || '暂无人工确认依据'
 }
 
-function getReviewStatusLabel(invoice: InvoiceDetail): string {
-  if (
-    invoice.qualificationStatus === 'pending'
-    && !invoice.submittedAt
-  ) {
-    return '待提交审核'
-  }
-
-  return getQualificationStatusLabel(invoice.qualificationStatus)
-}
-
 function canReviewCategory(): boolean {
   return isCategoryEditable.value
-}
-
-function getExtractionStatusLabel(status: InvoiceDetailFile['extractionStatus']): string {
-  const labels = {
-    pending: '处理中',
-    success: '解析成功',
-    failed: '解析失败',
-  }
-
-  return labels[status]
-}
-
-function getExtractionStatusType(status: InvoiceDetailFile['extractionStatus']) {
-  const types = {
-    pending: 'warning',
-    success: 'success',
-    failed: 'danger',
-  } as const
-
-  return types[status]
 }
 
 function goBack() {
@@ -405,310 +364,41 @@ watch(
     </el-alert>
 
     <template v-else-if="invoiceDetail">
-      <div class="status-strip">
-        <div>
-          <span>资质审核</span>
-          <el-tag type="warning">
-            {{ getReviewStatusLabel(invoiceDetail) }}
-          </el-tag>
-        </div>
-        <div>
-          <span>财务提交</span>
-          <el-tag effect="plain">
-            {{ getFinanceStatusLabel(invoiceDetail.financeStatus) }}
-          </el-tag>
-        </div>
-        <div>
-          <span>最终报销</span>
-          <el-tag effect="plain">
-            {{ getReimbursementStatusLabel(invoiceDetail.reimbursementStatus) }}
-          </el-tag>
-        </div>
-      </div>
+      <InvoiceStatusStrip :invoice="invoiceDetail" />
 
       <div class="detail-grid">
         <div class="main-column">
-          <el-card
-            shadow="never"
-            class="detail-card"
-          >
-            <div class="card-title">
-              <h2>发票基础信息</h2>
-              <el-tag
-                :type="selectedFile ? getExtractionStatusType(selectedFile.extractionStatus) : 'info'"
-                effect="plain"
-              >
-                {{ selectedFile ? getExtractionStatusLabel(selectedFile.extractionStatus) : '无关联文件' }}
-              </el-tag>
-            </div>
+          <InvoiceBasicInfo
+            :invoice="invoiceDetail"
+            :selected-file="selectedFile"
+          />
 
-            <div class="info-grid">
-              <div>
-                <span>发票号码</span>
-                <strong>{{ invoiceDetail.invoiceNumber || '未识别' }}</strong>
-              </div>
-              <div>
-                <span>开票日期</span>
-                <strong>{{ invoiceDetail.invoiceDate || '未识别' }}</strong>
-              </div>
-              <div>
-                <span>销售方名称</span>
-                <strong>{{ invoiceDetail.sellerName || '未识别' }}</strong>
-              </div>
-              <div>
-                <span>销售方税号</span>
-                <strong>{{ invoiceDetail.sellerTaxId || '未识别' }}</strong>
-              </div>
-              <div>
-                <span>价税合计</span>
-                <strong class="amount">{{ formatAmount(invoiceDetail.totalAmount) }}</strong>
-              </div>
-              <div>
-                <span>上传批次</span>
-                <strong class="muted-value">{{ invoiceDetail.sourceBatchId || '无' }}</strong>
-              </div>
-              <div>
-                <span>上传时间</span>
-                <strong>{{ invoiceDetail.createdAt }}</strong>
-              </div>
-              <div>
-                <span>提交审核时间</span>
-                <strong>{{ invoiceDetail.submittedAt || '尚未提交' }}</strong>
-              </div>
-            </div>
-          </el-card>
+          <InvoiceItemsTable
+            :items="invoiceDetail.items"
+            :first-item-reason="firstItemReason"
+            @view-evidence="openEvidenceDialog"
+          />
 
-          <el-card
-            shadow="never"
-            class="detail-card"
-          >
-            <div class="card-title">
-              <h2>商品明细</h2>
-              <span class="card-caption">{{ invoiceDetail.items.length }} 个商品</span>
-            </div>
-
-            <el-table
-              :data="invoiceDetail.items"
-              stripe
-              empty-text="暂无商品明细"
-            >
-              <el-table-column
-                prop="itemName"
-                label="商品名称"
-                min-width="170"
-              />
-              <el-table-column
-                prop="quantity"
-                label="数量"
-                width="80"
-              />
-              <el-table-column
-                label="单价"
-                width="120"
-              >
-                <template #default="{ row }">
-                  {{ formatAmount(row.unitPrice) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                label="明细金额"
-                width="120"
-              >
-                <template #default="{ row }">
-                  {{ formatAmount(row.lineAmount) }}
-                </template>
-              </el-table-column>
-              <el-table-column
-                label="单价分类"
-                width="110"
-              >
-                <template #default="{ row }">
-                  <el-tag effect="plain">
-                    {{ getPriceTypeLabel(row.priceType) }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column
-                label="品类结果"
-                width="100"
-              >
-                <template #default="{ row }">
-                  <el-tag
-                    type="warning"
-                    effect="plain"
-                  >
-                    {{ getCategoryResult(row) }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-              <el-table-column
-                label="判断依据"
-                width="110"
-              >
-                <template #default="{ row }">
-                  <el-button
-                    link
-                    type="primary"
-                    @click="openEvidenceDialog(row)"
-                  >
-                    查看依据
-                  </el-button>
-                </template>
-              </el-table-column>
-            </el-table>
-
-            <div class="reason-row">
-              <span>判断依据</span>
-              <p>{{ firstItemReason }}</p>
-            </div>
-          </el-card>
-
-          <el-card
-            shadow="never"
-            class="detail-card"
-          >
-            <div class="card-title">
-              <h2>预审结果</h2>
-              <el-tag type="warning">
-                {{ getReviewStatusLabel(invoiceDetail) }}
-              </el-tag>
-            </div>
-
-            <div class="review-result">
-              <div>
-                <span>预审原因</span>
-                <strong>{{ invoiceDetail.qualificationReason || '暂无预审结论' }}</strong>
-              </div>
-              <div>
-                <span>自然周累计</span>
-                <strong>{{ formatAmount(invoiceDetail.cumulativeAmount) }}</strong>
-              </div>
-              <div>
-                <span>累计所属周</span>
-                <strong>{{ invoiceDetail.cumulativeWeekStart || '尚未计算' }}</strong>
-              </div>
-              <div>
-                <span>人工处理备注</span>
-                <strong>{{ invoiceDetail.manualNote || '暂无备注' }}</strong>
-              </div>
-            </div>
-
-            <div class="review-actions">
-              <div v-if="canSubmitReview">
-                <strong>提交审核</strong>
-                <span>确认商品品类结果后，提交整张发票进入审核队列。</span>
-              </div>
-              <div v-else-if="canEnterInvoiceReview">
-                <strong>管理员审核</strong>
-                <span>确认整张发票的处理结论。</span>
-              </div>
-              <div v-else-if="isCategoryEditable">
-                <strong>待完成商品确认</strong>
-                <span>请先处理所有“存疑”或未判断的商品品类。</span>
-              </div>
-              <div v-else>
-                <strong>当前无可用审核操作</strong>
-                <span>请根据当前发票状态继续处理。</span>
-              </div>
-              <el-button
-                v-if="canSubmitReview"
-                type="primary"
-                :loading="submitReviewLoading"
-                @click="submitInvoiceReview"
-              >
-                提交审核
-              </el-button>
-              <el-button
-                v-else-if="canEnterInvoiceReview"
-                type="primary"
-                @click="handleInvoiceReview"
-              >
-                进入审核
-              </el-button>
-            </div>
-          </el-card>
+          <InvoiceReviewCard
+            :invoice="invoiceDetail"
+            :can-submit-review="canSubmitReview"
+            :can-enter-invoice-review="canEnterInvoiceReview"
+            :is-category-editable="isCategoryEditable"
+            :submit-review-loading="submitReviewLoading"
+            @submit-review="submitInvoiceReview"
+            @enter-review="handleInvoiceReview"
+          />
         </div>
 
         <aside class="side-column">
-          <el-card
-            shadow="never"
-            class="preview-card"
-          >
-            <div class="card-title">
-              <h2>原始发票</h2>
-              <el-button
-                link
-                type="primary"
-                :disabled="!selectedFile"
-                @click="previewSelectedFile"
-              >
-                放大预览
-              </el-button>
-            </div>
-
-            <el-select
-              v-if="invoiceDetail.files.length > 1"
-              v-model="selectedFileId"
-              class="file-selector"
-              placeholder="选择原始文件"
-            >
-              <el-option
-                v-for="file in invoiceDetail.files"
-                :key="file.id"
-                :label="file.originalName"
-                :value="file.id"
-              />
-            </el-select>
-
-            <div class="pdf-placeholder">
-              <div class="pdf-icon">PDF</div>
-              <strong>{{ selectedFile?.originalName || '暂无关联文件' }}</strong>
-              <span>{{ selectedFile ? '点击预览查看原始发票' : '该发票暂未关联可预览文件' }}</span>
-              <el-button
-                type="primary"
-                plain
-                :disabled="!selectedFile"
-                :loading="previewing"
-                @click="previewSelectedFile"
-              >
-                预览文件
-              </el-button>
-            </div>
-          </el-card>
-
-          <el-card
-            shadow="never"
-            class="detail-card"
-          >
-            <div class="card-title">
-              <h2>关联文件</h2>
-              <span class="card-caption">{{ invoiceDetail.files.length }} 个文件</span>
-            </div>
-
-            <el-empty
-              v-if="invoiceDetail.files.length === 0"
-              description="暂无关联文件"
-              :image-size="72"
-            />
-            <template v-else>
-              <div
-                v-for="file in invoiceDetail.files"
-                :key="file.id"
-                class="file-row"
-              >
-                <div>
-                  <strong>{{ file.originalName }}</strong>
-                  <span>{{ file.fileSize }} 字节</span>
-                </div>
-                <el-tag
-                  :type="getExtractionStatusType(file.extractionStatus)"
-                  effect="plain"
-                >
-                  {{ getExtractionStatusLabel(file.extractionStatus) }}
-                </el-tag>
-              </div>
-            </template>
-          </el-card>
+          <InvoicePreviewCard
+            :files="invoiceDetail.files"
+            :selected-file="selectedFile"
+            :selected-file-id="selectedFileId"
+            :previewing="previewing"
+            @preview="previewSelectedFile"
+            @update:selected-file-id="selectedFileId = $event"
+          />
         </aside>
       </div>
     </template>
