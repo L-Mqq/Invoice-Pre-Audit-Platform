@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -27,6 +27,13 @@ const loading = ref(false)
 const loadError = ref('')
 const previewing = ref(false)
 const downloading = ref(false)
+const evidenceDialogVisible = ref(false)
+const categoryReviewDialogVisible = ref(false)
+const selectedReviewItem = ref<InvoiceDetailItem | null>(null)
+const categoryReviewForm = reactive({
+  result: '',
+  reason: '',
+})
 
 const selectedFile = computed<InvoiceDetailFile | null>(() => {
   if (!invoiceDetail.value || selectedFileId.value === null) {
@@ -86,6 +93,18 @@ function needsCategoryReview(item: InvoiceDetailItem): boolean {
   return categoryResult === '存疑' || categoryResult === '待判断'
 }
 
+function getAutoCategoryReason(item: InvoiceDetailItem): string {
+  return item.aiCategoryReason || item.categoryReason || '暂无自动判断依据'
+}
+
+function getManualCategoryReason(item: InvoiceDetailItem): string {
+  return item.manualCategoryReason || '暂无人工确认依据'
+}
+
+function canReviewCategory(item: InvoiceDetailItem): boolean {
+  return needsCategoryReview(item) || Boolean(item.manualCategoryResult)
+}
+
 function getExtractionStatusLabel(status: InvoiceDetailFile['extractionStatus']): string {
   const labels = {
     pending: '处理中',
@@ -112,10 +131,37 @@ function goBack() {
   })
 }
 
-function handleItemCategoryReview(item: InvoiceDetailItem) {
-  ElMessage.info(
-    `商品“${item.itemName}”的人工品类确认入口已就绪，暂不提交审核数据`,
-  )
+function openEvidenceDialog(item: InvoiceDetailItem) {
+  selectedReviewItem.value = item
+  evidenceDialogVisible.value = true
+}
+
+function openCategoryReviewDialog() {
+  if (!selectedReviewItem.value) {
+    return
+  }
+
+  categoryReviewForm.result = selectedReviewItem.value.manualCategoryResult
+    || selectedReviewItem.value.finalCategoryResult
+    || '存疑'
+  categoryReviewForm.reason = selectedReviewItem.value.manualCategoryReason || ''
+  evidenceDialogVisible.value = false
+  categoryReviewDialogVisible.value = true
+}
+
+function submitCategoryReview() {
+  if (!categoryReviewForm.result) {
+    ElMessage.warning('请选择最终品类结果')
+    return
+  }
+
+  if (!categoryReviewForm.reason.trim()) {
+    ElMessage.warning('请填写人工判断依据')
+    return
+  }
+
+  categoryReviewDialogVisible.value = false
+  ElMessage.info('人工品类确认内容已填写，当前暂不提交审核数据')
 }
 
 function handleInvoiceReview() {
@@ -410,24 +456,17 @@ watch(
                 </template>
               </el-table-column>
               <el-table-column
-                label="人工确认"
+                label="判断依据"
                 width="110"
               >
                 <template #default="{ row }">
                   <el-button
-                    v-if="needsCategoryReview(row)"
                     link
                     type="primary"
-                    @click="handleItemCategoryReview(row)"
+                    @click="openEvidenceDialog(row)"
                   >
-                    确认品类
+                    查看依据
                   </el-button>
-                  <span
-                    v-else
-                    class="table-placeholder"
-                  >
-                    —
-                  </span>
                 </template>
               </el-table-column>
             </el-table>
@@ -566,6 +605,130 @@ watch(
         </aside>
       </div>
     </template>
+
+    <el-dialog
+      v-model="evidenceDialogVisible"
+      title="商品判断依据"
+      width="560px"
+      destroy-on-close
+    >
+      <div
+        v-if="selectedReviewItem"
+        class="evidence-content"
+      >
+        <div class="evidence-item-name">
+          <span>商品名称</span>
+          <strong>{{ selectedReviewItem.itemName }}</strong>
+        </div>
+
+        <div class="evidence-section">
+          <div class="evidence-section-title">
+            <span>自动判断</span>
+            <el-tag effect="plain">
+              {{ selectedReviewItem.aiCategoryResult || '待判断' }}
+            </el-tag>
+          </div>
+          <p>{{ getAutoCategoryReason(selectedReviewItem) }}</p>
+        </div>
+
+        <div class="evidence-section">
+          <div class="evidence-section-title">
+            <span>人工确认</span>
+            <el-tag
+              :type="selectedReviewItem.manualCategoryResult ? 'success' : 'info'"
+              effect="plain"
+            >
+              {{ selectedReviewItem.manualCategoryResult || '暂无人工确认' }}
+            </el-tag>
+          </div>
+          <p>{{ getManualCategoryReason(selectedReviewItem) }}</p>
+        </div>
+
+        <div class="final-category-result">
+          <span>最终品类结果</span>
+          <el-tag type="warning">
+            {{ getCategoryResult(selectedReviewItem) }}
+          </el-tag>
+        </div>
+      </div>
+
+      <template #footer>
+        <el-button @click="evidenceDialogVisible = false">
+          关闭
+        </el-button>
+        <el-button
+          v-if="selectedReviewItem && canReviewCategory(selectedReviewItem)"
+          type="primary"
+          @click="openCategoryReviewDialog"
+        >
+          {{ selectedReviewItem?.manualCategoryResult ? '修改人工确认' : '人工确认品类' }}
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="categoryReviewDialogVisible"
+      title="人工确认商品品类"
+      width="520px"
+      destroy-on-close
+    >
+      <div
+        v-if="selectedReviewItem"
+        class="category-review-content"
+      >
+        <div class="review-item-summary">
+          <strong>{{ selectedReviewItem.itemName }}</strong>
+          <span>
+            单价 {{ formatAmount(selectedReviewItem.unitPrice) }}
+            · 金额 {{ formatAmount(selectedReviewItem.lineAmount) }}
+          </span>
+        </div>
+
+        <div class="readonly-evidence">
+          <span>自动判断依据</span>
+          <p>{{ getAutoCategoryReason(selectedReviewItem) }}</p>
+        </div>
+
+        <el-form label-position="top">
+          <el-form-item label="最终品类结果">
+            <el-radio-group v-model="categoryReviewForm.result">
+              <el-radio value="可以">
+                可以
+              </el-radio>
+              <el-radio value="存疑">
+                存疑
+              </el-radio>
+              <el-radio value="不可以">
+                不可以
+              </el-radio>
+            </el-radio-group>
+          </el-form-item>
+
+          <el-form-item label="人工判断依据">
+            <el-input
+              v-model="categoryReviewForm.reason"
+              type="textarea"
+              :rows="4"
+              maxlength="2000"
+              show-word-limit
+              placeholder="请说明人工确认的依据"
+            />
+          </el-form-item>
+        </el-form>
+      </div>
+
+      <template #footer>
+        <el-button @click="categoryReviewDialogVisible = false">
+          取消
+        </el-button>
+        <el-button
+          type="primary"
+          @click="submitCategoryReview"
+        >
+          确认提交
+        </el-button>
+      </template>
+    </el-dialog>
   </section>
 </template>
 
@@ -758,8 +921,86 @@ watch(
   line-height: 1.6;
 }
 
-.table-placeholder {
-  color: #94a3b8;
+.evidence-content,
+.category-review-content {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.evidence-item-name,
+.evidence-section-title,
+.final-category-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.evidence-item-name {
+  padding-bottom: 14px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.evidence-item-name span,
+.evidence-section-title span,
+.final-category-result span,
+.readonly-evidence > span {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.evidence-item-name strong {
+  color: #1e293b;
+  font-size: 15px;
+}
+
+.evidence-section {
+  padding: 14px;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.evidence-section p,
+.readonly-evidence p {
+  margin: 10px 0 0;
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.final-category-result {
+  padding: 14px;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.review-item-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.review-item-summary strong {
+  color: #1e293b;
+  font-size: 15px;
+}
+
+.review-item-summary span {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.readonly-evidence {
+  padding: 14px;
+  border-left: 3px solid #93c5fd;
+  border-radius: 0 8px 8px 0;
+  background: #eff6ff;
 }
 
 .review-actions {
