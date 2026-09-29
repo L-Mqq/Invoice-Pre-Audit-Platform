@@ -79,14 +79,9 @@ export function useInvoiceReviewSubmission(
     }
   }
 
-  function handleInvoiceReview() {
-    ElMessage.info('发票级管理员审核入口已就绪，暂不提交审核数据')
-  }
-
   return {
     canEnterInvoiceReview,
     canSubmitReview,
-    handleInvoiceReview,
     isCategoryEditable,
     submitInvoiceReview,
     submitReviewLoading,

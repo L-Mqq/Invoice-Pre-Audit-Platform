@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { InvoiceDetailItem } from '../../apis/invoices'
 import InvoiceBasicInfo from './components/InvoiceBasicInfo.vue'
 import InvoiceItemsTable from './components/InvoiceItemsTable.vue'
 import InvoicePreviewCard from './components/InvoicePreviewCard.vue'
+import InvoiceQualificationReviewDialog from './components/InvoiceQualificationReviewDialog.vue'
 import InvoiceReviewCard from './components/InvoiceReviewCard.vue'
 import InvoiceStatusStrip from './components/InvoiceStatusStrip.vue'
 import { useInvoiceCategoryReview } from './composables/useInvoiceCategoryReview'
@@ -12,6 +14,7 @@ import { useInvoiceFileActions } from './composables/useInvoiceFileActions'
 import { useInvoiceReviewSubmission } from './composables/useInvoiceReviewSubmission'
 
 const router = useRouter()
+const qualificationReviewVisible = ref(false)
 
 const {
   firstItemReason,
@@ -47,7 +50,6 @@ const {
 const {
   canEnterInvoiceReview,
   canSubmitReview,
-  handleInvoiceReview,
   isCategoryEditable,
   submitInvoiceReview,
   submitReviewLoading,
@@ -81,6 +83,10 @@ function goBack() {
   router.push({
     name: 'invoice-list',
   })
+}
+
+function openQualificationReview() {
+  qualificationReviewVisible.value = true
 }
 
 </script>
@@ -165,7 +171,7 @@ function goBack() {
             :is-category-editable="isCategoryEditable"
             :submit-review-loading="submitReviewLoading"
             @submit-review="submitInvoiceReview"
-            @enter-review="handleInvoiceReview"
+            @enter-review="openQualificationReview"
           />
         </div>
 
@@ -181,6 +187,11 @@ function goBack() {
         </aside>
       </div>
     </template>
+
+    <InvoiceQualificationReviewDialog
+      v-model:visible="qualificationReviewVisible"
+      :invoice="invoiceDetail"
+    />
 
     <el-dialog
       v-model="evidenceDialogVisible"
