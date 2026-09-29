@@ -13,6 +13,10 @@ import {
   previewInvoiceFile,
 } from '../../apis/invoiceFile'
 import {
+  reviewItemCategory,
+  type CategoryReviewResult,
+} from '../../apis/invoiceReview'
+import {
   getFinanceStatusLabel,
   getQualificationStatusLabel,
   getReimbursementStatusLabel,
@@ -29,6 +33,7 @@ const previewing = ref(false)
 const downloading = ref(false)
 const evidenceDialogVisible = ref(false)
 const categoryReviewDialogVisible = ref(false)
+const categoryReviewSubmitting = ref(false)
 const selectedReviewItem = ref<InvoiceDetailItem | null>(null)
 const categoryReviewForm = reactive({
   result: '',
@@ -149,7 +154,7 @@ function openCategoryReviewDialog() {
   categoryReviewDialogVisible.value = true
 }
 
-function submitCategoryReview() {
+async function submitCategoryReview() {
   if (!categoryReviewForm.result) {
     ElMessage.warning('请选择最终品类结果')
     return
@@ -160,8 +165,29 @@ function submitCategoryReview() {
     return
   }
 
-  categoryReviewDialogVisible.value = false
-  ElMessage.info('人工品类确认内容已填写，当前暂不提交审核数据')
+  if (!selectedReviewItem.value) {
+    ElMessage.warning('未选择需要人工确认的商品')
+    return
+  }
+
+  categoryReviewSubmitting.value = true
+
+  try {
+    await reviewItemCategory({
+      itemId: selectedReviewItem.value.id,
+      result: categoryReviewForm.result as CategoryReviewResult,
+      note: categoryReviewForm.reason.trim(),
+    })
+
+    categoryReviewDialogVisible.value = false
+    selectedReviewItem.value = null
+    await loadInvoiceDetail()
+    ElMessage.success('商品品类人工确认已保存')
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error))
+  } finally {
+    categoryReviewSubmitting.value = false
+  }
 }
 
 function handleInvoiceReview() {
@@ -723,6 +749,7 @@ watch(
         </el-button>
         <el-button
           type="primary"
+          :loading="categoryReviewSubmitting"
           @click="submitCategoryReview"
         >
           确认提交
