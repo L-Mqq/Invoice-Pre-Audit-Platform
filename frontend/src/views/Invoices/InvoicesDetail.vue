@@ -1,112 +1,61 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
-import { useRoute, useRouter } from 'vue-router'
-import {
-  getInvoiceDetail,
-  type InvoiceDetail,
-  type InvoiceDetailFile,
-  type InvoiceDetailItem,
-} from '../../apis/invoices'
-import {
-  downloadInvoiceFile,
-  previewInvoiceFile,
-} from '../../apis/invoiceFile'
-import {
-  reviewItemCategory,
-  submitInvoiceForReview,
-  type CategoryReviewResult,
-} from '../../apis/invoiceReview'
+import { useRouter } from 'vue-router'
+import type { InvoiceDetailItem } from '../../apis/invoices'
 import InvoiceBasicInfo from './components/InvoiceBasicInfo.vue'
 import InvoiceItemsTable from './components/InvoiceItemsTable.vue'
 import InvoicePreviewCard from './components/InvoicePreviewCard.vue'
 import InvoiceReviewCard from './components/InvoiceReviewCard.vue'
 import InvoiceStatusStrip from './components/InvoiceStatusStrip.vue'
+import { useInvoiceCategoryReview } from './composables/useInvoiceCategoryReview'
+import { useInvoiceDetail } from './composables/useInvoiceDetail'
+import { useInvoiceFileActions } from './composables/useInvoiceFileActions'
+import { useInvoiceReviewSubmission } from './composables/useInvoiceReviewSubmission'
 
-const route = useRoute()
 const router = useRouter()
 
-const invoiceDetail = ref<InvoiceDetail | null>(null)
-const selectedFileId = ref<number | null>(null)
-const loading = ref(false)
-const loadError = ref('')
-const previewing = ref(false)
-const downloading = ref(false)
-const evidenceDialogVisible = ref(false)
-const categoryReviewDialogVisible = ref(false)
-const categoryReviewSubmitting = ref(false)
-const submitReviewLoading = ref(false)
-const selectedReviewItem = ref<InvoiceDetailItem | null>(null)
-const categoryReviewForm = reactive({
-  result: '',
-  reason: '',
+const {
+  firstItemReason,
+  getRouteInvoiceId,
+  invoiceDetail,
+  loadError,
+  loading,
+  loadInvoiceDetail,
+  selectedFile,
+  selectedFileId,
+} = useInvoiceDetail()
+
+const {
+  downloadSelectedFile,
+  downloading,
+  previewSelectedFile,
+  previewing,
+} = useInvoiceFileActions(selectedFile)
+
+const {
+  categoryReviewDialogVisible,
+  categoryReviewForm,
+  categoryReviewSubmitting,
+  evidenceDialogVisible,
+  openCategoryReviewDialog,
+  openEvidenceDialog,
+  selectedReviewItem,
+  submitCategoryReview,
+} = useInvoiceCategoryReview({
+  loadInvoiceDetail,
 })
 
-const selectedFile = computed<InvoiceDetailFile | null>(() => {
-  if (!invoiceDetail.value || selectedFileId.value === null) {
-    return null
-  }
-
-  return invoiceDetail.value.files.find(
-    (file) => file.id === selectedFileId.value,
-  ) || null
+const {
+  canEnterInvoiceReview,
+  canSubmitReview,
+  handleInvoiceReview,
+  isCategoryEditable,
+  submitInvoiceReview,
+  submitReviewLoading,
+} = useInvoiceReviewSubmission({
+  getRouteInvoiceId,
+  invoiceDetail,
+  loadInvoiceDetail,
 })
-
-const firstItemReason = computed(() => {
-  return invoiceDetail.value?.items[0]?.aiCategoryReason || '暂无判断依据'
-})
-
-const isCategoryEditable = computed(() => {
-  if (!invoiceDetail.value) {
-    return false
-  }
-
-  return !invoiceDetail.value.submittedAt
-    && (
-      invoiceDetail.value.qualificationStatus === 'pending'
-      || invoiceDetail.value.qualificationStatus === 'pending_manual'
-    )
-})
-
-const canSubmitReview = computed(() => {
-  if (!invoiceDetail.value || !isCategoryEditable.value) {
-    return false
-  }
-
-  return invoiceDetail.value.items.length > 0
-    && invoiceDetail.value.items.every(
-      (item) => item.finalCategoryResult && item.finalCategoryResult !== '存疑',
-    )
-})
-
-const canEnterInvoiceReview = computed(() => {
-  if (!invoiceDetail.value) {
-    return false
-  }
-
-  return Boolean(invoiceDetail.value.submittedAt)
-    && invoiceDetail.value.qualificationStatus === 'pending'
-})
-
-function getRouteInvoiceId(): number | null {
-  const value = route.params.invoiceId
-  const rawInvoiceId = Array.isArray(value) ? value[0] : value
-  const invoiceId = Number(rawInvoiceId)
-
-  if (!Number.isSafeInteger(invoiceId) || invoiceId <= 0) {
-    return null
-  }
-
-  return invoiceId
-}
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message
-  }
-
-  return '获取发票详情失败'
-}
 
 function formatAmount(amount: number | string | null): string {
   return `¥${Number(amount || 0).toFixed(2)}`
@@ -134,176 +83,6 @@ function goBack() {
   })
 }
 
-function openEvidenceDialog(item: InvoiceDetailItem) {
-  selectedReviewItem.value = item
-  evidenceDialogVisible.value = true
-}
-
-function openCategoryReviewDialog() {
-  if (!selectedReviewItem.value) {
-    return
-  }
-
-  categoryReviewForm.result = selectedReviewItem.value.manualCategoryResult
-    || selectedReviewItem.value.finalCategoryResult
-    || '存疑'
-  categoryReviewForm.reason = selectedReviewItem.value.manualCategoryReason || ''
-  evidenceDialogVisible.value = false
-  categoryReviewDialogVisible.value = true
-}
-
-async function submitCategoryReview() {
-  if (!categoryReviewForm.result) {
-    ElMessage.warning('请选择最终品类结果')
-    return
-  }
-
-  if (!categoryReviewForm.reason.trim()) {
-    ElMessage.warning('请填写人工判断依据')
-    return
-  }
-
-  if (!selectedReviewItem.value) {
-    ElMessage.warning('未选择需要人工确认的商品')
-    return
-  }
-
-  categoryReviewSubmitting.value = true
-
-  try {
-    await reviewItemCategory({
-      itemId: selectedReviewItem.value.id,
-      result: categoryReviewForm.result as CategoryReviewResult,
-      note: categoryReviewForm.reason.trim(),
-    })
-
-    categoryReviewDialogVisible.value = false
-    selectedReviewItem.value = null
-    await loadInvoiceDetail()
-    ElMessage.success('商品品类人工确认已保存')
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error))
-  } finally {
-    categoryReviewSubmitting.value = false
-  }
-}
-
-async function submitInvoiceReview() {
-  const invoiceId = getRouteInvoiceId()
-
-  if (!invoiceId || !canSubmitReview.value) {
-    ElMessage.warning('请先完成全部商品的品类确认，再提交审核')
-    return
-  }
-
-  submitReviewLoading.value = true
-
-  try {
-    await submitInvoiceForReview(invoiceId)
-    await loadInvoiceDetail()
-    ElMessage.success('发票已提交审核，商品品类已锁定')
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error))
-  } finally {
-    submitReviewLoading.value = false
-  }
-}
-
-function handleInvoiceReview() {
-  ElMessage.info('发票级管理员审核入口已就绪，暂不提交审核数据')
-}
-
-async function loadInvoiceDetail() {
-  const invoiceId = getRouteInvoiceId()
-
-  invoiceDetail.value = null
-  selectedFileId.value = null
-  loadError.value = ''
-
-  if (!invoiceId) {
-    loadError.value = '发票 ID 无效'
-    return
-  }
-
-  loading.value = true
-
-  try {
-    const detail = await getInvoiceDetail(invoiceId)
-
-    invoiceDetail.value = detail
-    selectedFileId.value = detail.files[0]?.id || null
-  } catch (error) {
-    loadError.value = getErrorMessage(error)
-  } finally {
-    loading.value = false
-  }
-}
-
-async function previewSelectedFile() {
-  if (!selectedFile.value) {
-    ElMessage.warning('暂无可预览的原始文件')
-    return
-  }
-
-  const previewWindow = window.open('', '_blank')
-  if (!previewWindow) {
-    ElMessage.warning('浏览器阻止了预览窗口，请允许打开新标签页后重试')
-    return
-  }
-
-  previewing.value = true
-
-  try {
-    const fileBlob = await previewInvoiceFile(selectedFile.value.id)
-    const previewUrl = URL.createObjectURL(fileBlob)
-
-    previewWindow.location.href = previewUrl
-    window.setTimeout(() => {
-      URL.revokeObjectURL(previewUrl)
-    }, 60_000)
-  } catch (error) {
-    previewWindow.close()
-    ElMessage.error(getErrorMessage(error))
-  } finally {
-    previewing.value = false
-  }
-}
-
-async function downloadSelectedFile() {
-  if (!selectedFile.value) {
-    ElMessage.warning('暂无可下载的原始文件')
-    return
-  }
-
-  downloading.value = true
-
-  try {
-    const fileBlob = await downloadInvoiceFile(selectedFile.value.id)
-    const downloadUrl = URL.createObjectURL(fileBlob)
-    const link = document.createElement('a')
-
-    link.href = downloadUrl
-    link.download = selectedFile.value.originalName
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    URL.revokeObjectURL(downloadUrl)
-  } catch (error) {
-    ElMessage.error(getErrorMessage(error))
-  } finally {
-    downloading.value = false
-  }
-}
-
-watch(
-  () => route.params.invoiceId,
-  () => {
-    loadInvoiceDetail()
-  },
-  {
-    immediate: true,
-  },
-)
 </script>
 
 <template>
