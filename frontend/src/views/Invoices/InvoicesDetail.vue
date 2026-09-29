@@ -14,6 +14,7 @@ import {
 } from '../../apis/invoiceFile'
 import {
   reviewItemCategory,
+  submitInvoiceForReview,
   type CategoryReviewResult,
 } from '../../apis/invoiceReview'
 import {
@@ -34,6 +35,7 @@ const downloading = ref(false)
 const evidenceDialogVisible = ref(false)
 const categoryReviewDialogVisible = ref(false)
 const categoryReviewSubmitting = ref(false)
+const submitReviewLoading = ref(false)
 const selectedReviewItem = ref<InvoiceDetailItem | null>(null)
 const categoryReviewForm = reactive({
   result: '',
@@ -52,6 +54,38 @@ const selectedFile = computed<InvoiceDetailFile | null>(() => {
 
 const firstItemReason = computed(() => {
   return invoiceDetail.value?.items[0]?.aiCategoryReason || '暂无判断依据'
+})
+
+const isCategoryEditable = computed(() => {
+  if (!invoiceDetail.value) {
+    return false
+  }
+
+  return !invoiceDetail.value.submittedAt
+    && (
+      invoiceDetail.value.qualificationStatus === 'pending'
+      || invoiceDetail.value.qualificationStatus === 'pending_manual'
+    )
+})
+
+const canSubmitReview = computed(() => {
+  if (!invoiceDetail.value || !isCategoryEditable.value) {
+    return false
+  }
+
+  return invoiceDetail.value.items.length > 0
+    && invoiceDetail.value.items.every(
+      (item) => item.finalCategoryResult && item.finalCategoryResult !== '存疑',
+    )
+})
+
+const canEnterInvoiceReview = computed(() => {
+  if (!invoiceDetail.value) {
+    return false
+  }
+
+  return Boolean(invoiceDetail.value.submittedAt)
+    && invoiceDetail.value.qualificationStatus === 'pending'
 })
 
 function getRouteInvoiceId(): number | null {
@@ -92,12 +126,6 @@ function getCategoryResult(item: InvoiceDetailItem): string {
   return item.finalCategoryResult || item.manualCategoryResult || item.aiCategoryResult || '待判断'
 }
 
-function needsCategoryReview(item: InvoiceDetailItem): boolean {
-  const categoryResult = getCategoryResult(item)
-
-  return categoryResult === '存疑' || categoryResult === '待判断'
-}
-
 function getAutoCategoryReason(item: InvoiceDetailItem): string {
   return item.aiCategoryReason || '暂无自动判断依据'
 }
@@ -106,8 +134,19 @@ function getManualCategoryReason(item: InvoiceDetailItem): string {
   return item.manualCategoryReason || '暂无人工确认依据'
 }
 
-function canReviewCategory(item: InvoiceDetailItem): boolean {
-  return needsCategoryReview(item) || Boolean(item.manualCategoryResult)
+function getReviewStatusLabel(invoice: InvoiceDetail): string {
+  if (
+    invoice.qualificationStatus === 'pending'
+    && !invoice.submittedAt
+  ) {
+    return '待提交审核'
+  }
+
+  return getQualificationStatusLabel(invoice.qualificationStatus)
+}
+
+function canReviewCategory(): boolean {
+  return isCategoryEditable.value
 }
 
 function getExtractionStatusLabel(status: InvoiceDetailFile['extractionStatus']): string {
@@ -187,6 +226,27 @@ async function submitCategoryReview() {
     ElMessage.error(getErrorMessage(error))
   } finally {
     categoryReviewSubmitting.value = false
+  }
+}
+
+async function submitInvoiceReview() {
+  const invoiceId = getRouteInvoiceId()
+
+  if (!invoiceId || !canSubmitReview.value) {
+    ElMessage.warning('请先完成全部商品的品类确认，再提交审核')
+    return
+  }
+
+  submitReviewLoading.value = true
+
+  try {
+    await submitInvoiceForReview(invoiceId)
+    await loadInvoiceDetail()
+    ElMessage.success('发票已提交审核，商品品类已锁定')
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error))
+  } finally {
+    submitReviewLoading.value = false
   }
 }
 
@@ -349,7 +409,7 @@ watch(
         <div>
           <span>资质审核</span>
           <el-tag type="warning">
-            {{ getQualificationStatusLabel(invoiceDetail.qualificationStatus) }}
+            {{ getReviewStatusLabel(invoiceDetail) }}
           </el-tag>
         </div>
         <div>
@@ -510,7 +570,7 @@ watch(
             <div class="card-title">
               <h2>预审结果</h2>
               <el-tag type="warning">
-                {{ getQualificationStatusLabel(invoiceDetail.qualificationStatus) }}
+                {{ getReviewStatusLabel(invoiceDetail) }}
               </el-tag>
             </div>
 
@@ -534,11 +594,32 @@ watch(
             </div>
 
             <div class="review-actions">
-              <div>
+              <div v-if="canSubmitReview">
+                <strong>提交审核</strong>
+                <span>确认商品品类结果后，提交整张发票进入审核队列。</span>
+              </div>
+              <div v-else-if="canEnterInvoiceReview">
                 <strong>管理员审核</strong>
                 <span>确认整张发票的处理结论。</span>
               </div>
+              <div v-else-if="isCategoryEditable">
+                <strong>待完成商品确认</strong>
+                <span>请先处理所有“存疑”或未判断的商品品类。</span>
+              </div>
+              <div v-else>
+                <strong>当前无可用审核操作</strong>
+                <span>请根据当前发票状态继续处理。</span>
+              </div>
               <el-button
+                v-if="canSubmitReview"
+                type="primary"
+                :loading="submitReviewLoading"
+                @click="submitInvoiceReview"
+              >
+                提交审核
+              </el-button>
+              <el-button
+                v-else-if="canEnterInvoiceReview"
                 type="primary"
                 @click="handleInvoiceReview"
               >
@@ -683,7 +764,7 @@ watch(
           关闭
         </el-button>
         <el-button
-          v-if="selectedReviewItem && canReviewCategory(selectedReviewItem)"
+          v-if="selectedReviewItem && canReviewCategory()"
           type="primary"
           @click="openCategoryReviewDialog"
         >
