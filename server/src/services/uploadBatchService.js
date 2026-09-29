@@ -104,6 +104,8 @@ async function createUploadBatch({ files, createdBy = null }) {
               invoiceId: storedFile.invoiceId,
               items: extraction.validation.data.items,
             })
+            
+            //判断商品品类
             const categoryJudgment = await judgeItems({ connection: resultConnection, items: createdItems, persist: true })
             await invoiceRepository.updateQualificationByCategory({
               connection: resultConnection,

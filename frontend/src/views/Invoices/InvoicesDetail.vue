@@ -80,6 +80,12 @@ function getCategoryResult(item: InvoiceDetailItem): string {
   return item.finalCategoryResult || item.manualCategoryResult || item.aiCategoryResult || '待判断'
 }
 
+function needsCategoryReview(item: InvoiceDetailItem): boolean {
+  const categoryResult = getCategoryResult(item)
+
+  return categoryResult === '存疑' || categoryResult === '待判断'
+}
+
 function getExtractionStatusLabel(status: InvoiceDetailFile['extractionStatus']): string {
   const labels = {
     pending: '处理中',
@@ -104,6 +110,16 @@ function goBack() {
   router.push({
     name: 'invoice-list',
   })
+}
+
+function handleItemCategoryReview(item: InvoiceDetailItem) {
+  ElMessage.info(
+    `商品“${item.itemName}”的人工品类确认入口已就绪，暂不提交审核数据`,
+  )
+}
+
+function handleInvoiceReview() {
+  ElMessage.info('发票级管理员审核入口已就绪，暂不提交审核数据')
 }
 
 async function loadInvoiceDetail() {
@@ -393,6 +409,27 @@ watch(
                   </el-tag>
                 </template>
               </el-table-column>
+              <el-table-column
+                label="人工确认"
+                width="110"
+              >
+                <template #default="{ row }">
+                  <el-button
+                    v-if="needsCategoryReview(row)"
+                    link
+                    type="primary"
+                    @click="handleItemCategoryReview(row)"
+                  >
+                    确认品类
+                  </el-button>
+                  <span
+                    v-else
+                    class="table-placeholder"
+                  >
+                    —
+                  </span>
+                </template>
+              </el-table-column>
             </el-table>
 
             <div class="reason-row">
@@ -429,6 +466,19 @@ watch(
                 <span>人工处理备注</span>
                 <strong>{{ invoiceDetail.manualNote || '暂无备注' }}</strong>
               </div>
+            </div>
+
+            <div class="review-actions">
+              <div>
+                <strong>管理员审核</strong>
+                <span>确认整张发票的处理结论。</span>
+              </div>
+              <el-button
+                type="primary"
+                @click="handleInvoiceReview"
+              >
+                进入审核
+              </el-button>
             </div>
           </el-card>
         </div>
@@ -708,6 +758,36 @@ watch(
   line-height: 1.6;
 }
 
+.table-placeholder {
+  color: #94a3b8;
+}
+
+.review-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.review-actions > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.review-actions strong {
+  color: #334155;
+  font-size: 14px;
+}
+
+.review-actions span {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
 .file-selector {
   width: 100%;
   margin-bottom: 12px;
@@ -803,6 +883,11 @@ watch(
   .info-grid,
   .review-result {
     grid-template-columns: 1fr;
+  }
+
+  .review-actions {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>

@@ -1,6 +1,6 @@
 const { pool } = require('../config/database')
 
-// 管理员结果
+// 管理员审核商品品类
 async function reviewItemCategory({ connection = pool, itemId, result, note, operatorId }) {
   await connection.beginTransaction()
   try {
@@ -71,6 +71,7 @@ async function reviewItemCategory({ connection = pool, itemId, result, note, ope
   }
 }
 
+// 查发票级信息
 async function findInvoiceForQualificationReview({
   connection = pool,
   invoiceId,
@@ -95,6 +96,7 @@ async function findInvoiceForQualificationReview({
   return rows[0] || null
 }
 
+// 查商品级信息
 async function findItemsForQualificationReview({
   connection = pool,
   invoiceId,
@@ -117,6 +119,7 @@ async function findItemsForQualificationReview({
   return rows
 }
 
+// 算出一个日期所在自然周的「周一」日期
 async function getWeekStart({
   connection = pool,
   date,
@@ -132,6 +135,7 @@ async function getWeekStart({
   return rows[0].week_start
 }
 
+// 查出同一销售方 同一自然周 已审核通过的发票
 async function findApprovedInvoicesForWeek({
   connection = pool,
   invoiceId,
@@ -154,6 +158,7 @@ async function findApprovedInvoicesForWeek({
   return rows
 }
 
+// 更新发票资质审核状态
 async function updateInvoiceQualificationReview({
   connection = pool,
   invoiceId,
@@ -189,6 +194,7 @@ async function updateInvoiceQualificationReview({
   )
 }
 
+// 插入一条操作日志
 async function createQualificationReviewLog({
   connection = pool,
   operatorId,
