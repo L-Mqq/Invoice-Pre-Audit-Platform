@@ -34,7 +34,15 @@ async function judgeItems({ items, connection, persist = false }) {
   const results = []
   for (const item of items || []) {
     const result = await judgeItem({ item, rules })
-    if (persist && item.id) await categoryRuleRepository.updateItemCategory({ connection, itemId: item.id, aiResult: result.aiResult, finalResult: result.categoryResult, reason: result.reason })
+    if (persist && item.id) {
+      await categoryRuleRepository.updateItemCategory({
+        connection,
+        itemId: item.id,
+        aiResult: result.aiResult,
+        finalResult: result.categoryResult,
+        aiCategoryReason: result.reason,
+      })
+    }
     results.push(result)
   }
   const hasRejected = results.some((item) => item.categoryResult === '不可以')

@@ -41,7 +41,9 @@ export interface UploadInvoiceItem {
   priceType: 'material' | 'low_value' | 'asset' | null
   lineAmount: number | string
   aiCategoryResult: string | null
+  aiCategoryReason: string | null
   manualCategoryResult: string | null
+  manualCategoryReason: string | null
   finalCategoryResult: string | null
   categoryReason: string | null
 }

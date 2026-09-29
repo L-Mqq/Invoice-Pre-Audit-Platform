@@ -13,12 +13,25 @@ async function findActiveRules({ connection = pool } = {}) {
 }
 
 // 更新商品品类结果。
-async function updateItemCategory({ connection = pool, itemId, aiResult = null, finalResult, reason }) {
+async function updateItemCategory({
+  connection = pool,
+  itemId,
+  aiResult = null,
+  finalResult,
+  aiCategoryReason,
+}) {
   await connection.execute(
     `UPDATE invoice_items
-        SET ai_category_result = ?, final_category_result = ?, category_reason = ?
+        SET ai_category_result = ?,
+            ai_category_reason = ?,
+            final_category_result = ?
       WHERE id = ?`,
-    [aiResult, finalResult, reason || null, itemId],
+    [
+      aiResult,
+      aiCategoryReason || null,
+      finalResult,
+      itemId,
+    ],
   )
 }
 

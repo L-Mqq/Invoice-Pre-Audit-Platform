@@ -59,7 +59,8 @@ async function findItemsByInvoiceIds(invoiceIds) {
   const placeholders = invoiceIds.map(() => '?').join(', ')
   const [rows] = await pool.execute(
     `SELECT id, invoice_id, item_name, quantity, unit_price, price_type,
-       line_amount, ai_category_result, manual_category_result,
+       line_amount, ai_category_result, ai_category_reason,
+       manual_category_result, manual_category_reason,
        final_category_result, category_reason, created_at, updated_at
      FROM invoice_items
      WHERE invoice_id IN (${placeholders})
@@ -183,7 +184,9 @@ async function findItemsByInvoiceId(invoiceId) {
        price_type,
        line_amount,
        ai_category_result,
+       ai_category_reason,
        manual_category_result,
+       manual_category_reason,
        final_category_result,
        category_reason,
        created_at,
@@ -207,16 +210,12 @@ async function updateQualificationByCategory({ connection = pool, id, categoryRe
   )
 }
 
-async function updateItemPriceType({ connection = pool, itemId, priceType, reason }) {
+async function updateItemPriceType({ connection = pool, itemId, priceType }) {
   await connection.execute(
     `UPDATE invoice_items
-        SET price_type = ?, category_reason = CASE
-          WHEN ? IS NULL THEN category_reason
-          WHEN category_reason IS NULL OR category_reason = '' THEN ?
-          ELSE CONCAT(category_reason, '；', ?)
-        END
+        SET price_type = ?
       WHERE id = ?`,
-    [priceType, reason, reason, reason, itemId],
+    [priceType, itemId],
   )
 }
 

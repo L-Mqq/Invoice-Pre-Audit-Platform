@@ -55,7 +55,9 @@ export interface InvoiceDetailItem {
   priceType: 'material' | 'low_value' | 'asset' | null
   lineAmount: number | string
   aiCategoryResult: '可以' | '存疑' | '不可以' | null
+  aiCategoryReason: string | null
   manualCategoryResult: '可以' | '存疑' | '不可以' | null
+  manualCategoryReason: string | null
   finalCategoryResult: '可以' | '存疑' | '不可以' | null
   categoryReason: string | null
   createdAt: string

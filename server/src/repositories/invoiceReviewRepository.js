@@ -7,6 +7,8 @@ async function reviewItemCategory({ connection = pool, itemId, result, note, ope
     const [items] = await connection.execute(
       `SELECT ii.id, ii.invoice_id AS invoiceId, ii.item_name AS itemName,
               ii.final_category_result AS previousResult,
+              ii.ai_category_reason AS aiCategoryReason,
+              ii.manual_category_reason AS previousManualCategoryReason,
               i.qualification_status AS qualificationStatus
          FROM invoice_items ii
          JOIN invoices i ON i.id = ii.invoice_id
@@ -24,9 +26,16 @@ async function reviewItemCategory({ connection = pool, itemId, result, note, ope
 
     await connection.execute(
       `UPDATE invoice_items
-          SET manual_category_result = ?, final_category_result = ?, category_reason = ?
+          SET manual_category_result = ?,
+              manual_category_reason = ?,
+              final_category_result = ?
         WHERE id = ?`,
-      [result, result, note || '管理员人工确认', itemId],
+      [
+        result,
+        note || '管理员人工确认',
+        result,
+        itemId,
+      ],
     )
 
     const [summary] = await connection.execute(
@@ -60,7 +69,19 @@ async function reviewItemCategory({ connection = pool, itemId, result, note, ope
       `INSERT INTO operation_logs
         (operator_id, operation_type, resource_type, resource_id, before_data, after_data)
        VALUES (?, 'manual_category_review', 'invoice_item', ?, ?, ?)`,
-      [operatorId, itemId, JSON.stringify({ finalCategoryResult: item.previousResult }), JSON.stringify({ finalCategoryResult: result, note: note || null })],
+      [
+        operatorId,
+        itemId,
+        JSON.stringify({
+          aiCategoryReason: item.aiCategoryReason,
+          finalCategoryResult: item.previousResult,
+          manualCategoryReason: item.previousManualCategoryReason,
+        }),
+        JSON.stringify({
+          finalCategoryResult: result,
+          manualCategoryReason: note || '管理员人工确认',
+        }),
+      ],
     )
 
     await connection.commit()
@@ -107,6 +128,8 @@ async function findItemsForQualificationReview({
        item_name,
        unit_price,
        price_type,
+       ai_category_reason,
+       manual_category_reason,
        final_category_result,
        category_reason
      FROM invoice_items

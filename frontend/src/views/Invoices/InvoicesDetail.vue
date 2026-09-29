@@ -371,7 +371,7 @@ watch(
                 width="80"
               />
               <el-table-column
-                label="含税单价"
+                label="单价"
                 width="120"
               >
                 <template #default="{ row }">
