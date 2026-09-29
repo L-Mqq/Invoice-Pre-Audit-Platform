@@ -143,7 +143,6 @@ CREATE TABLE IF NOT EXISTS invoice_items (
   manual_category_reason TEXT NULL COMMENT '管理员人工品类判断依据',
   -- 规则引擎和人工审核后的最终品类结果。
   final_category_result ENUM('可以', '存疑', '不可以') NULL COMMENT '最终品类审核结果',
-  category_reason TEXT NULL COMMENT '品类判断依据或人工说明',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后更新时间',
   PRIMARY KEY (id),

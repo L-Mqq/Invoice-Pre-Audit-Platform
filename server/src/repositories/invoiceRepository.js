@@ -61,7 +61,7 @@ async function findItemsByInvoiceIds(invoiceIds) {
     `SELECT id, invoice_id, item_name, quantity, unit_price, price_type,
        line_amount, ai_category_result, ai_category_reason,
        manual_category_result, manual_category_reason,
-       final_category_result, category_reason, created_at, updated_at
+       final_category_result, created_at, updated_at
      FROM invoice_items
      WHERE invoice_id IN (${placeholders})
      ORDER BY invoice_id, id`,
@@ -188,7 +188,6 @@ async function findItemsByInvoiceId(invoiceId) {
        manual_category_result,
        manual_category_reason,
        final_category_result,
-       category_reason,
        created_at,
        updated_at
      FROM invoice_items

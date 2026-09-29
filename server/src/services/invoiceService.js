@@ -151,7 +151,6 @@ async function getInvoiceDetail(rawInvoiceId) {
       manualCategoryResult: item.manual_category_result,
       manualCategoryReason: item.manual_category_reason,
       finalCategoryResult: item.final_category_result,
-      categoryReason: item.category_reason,
       createdAt: item.created_at,
       updatedAt: item.updated_at,
     })),

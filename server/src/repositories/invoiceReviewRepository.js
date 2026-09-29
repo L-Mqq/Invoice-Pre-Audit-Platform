@@ -130,8 +130,7 @@ async function findItemsForQualificationReview({
        price_type,
        ai_category_reason,
        manual_category_reason,
-       final_category_result,
-       category_reason
+       final_category_result
      FROM invoice_items
      WHERE invoice_id = ?
      ORDER BY id

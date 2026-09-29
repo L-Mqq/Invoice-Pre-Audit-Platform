@@ -46,7 +46,7 @@ const selectedFile = computed<InvoiceDetailFile | null>(() => {
 })
 
 const firstItemReason = computed(() => {
-  return invoiceDetail.value?.items[0]?.categoryReason || '暂无判断依据'
+  return invoiceDetail.value?.items[0]?.aiCategoryReason || '暂无判断依据'
 })
 
 function getRouteInvoiceId(): number | null {
@@ -94,7 +94,7 @@ function needsCategoryReview(item: InvoiceDetailItem): boolean {
 }
 
 function getAutoCategoryReason(item: InvoiceDetailItem): string {
-  return item.aiCategoryReason || item.categoryReason || '暂无自动判断依据'
+  return item.aiCategoryReason || '暂无自动判断依据'
 }
 
 function getManualCategoryReason(item: InvoiceDetailItem): string {

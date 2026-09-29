@@ -59,7 +59,6 @@ export interface InvoiceDetailItem {
   manualCategoryResult: '可以' | '存疑' | '不可以' | null
   manualCategoryReason: string | null
   finalCategoryResult: '可以' | '存疑' | '不可以' | null
-  categoryReason: string | null
   createdAt: string
   updatedAt: string
 }

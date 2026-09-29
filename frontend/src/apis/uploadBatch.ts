@@ -45,7 +45,6 @@ export interface UploadInvoiceItem {
   manualCategoryResult: string | null
   manualCategoryReason: string | null
   finalCategoryResult: string | null
-  categoryReason: string | null
 }
 
 export interface UploadBatchResult {
