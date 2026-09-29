@@ -9,7 +9,8 @@ async function reviewItemCategory({ connection = pool, itemId, result, note, ope
               ii.final_category_result AS previousResult,
               ii.ai_category_reason AS aiCategoryReason,
               ii.manual_category_reason AS previousManualCategoryReason,
-              i.qualification_status AS qualificationStatus
+              i.qualification_status AS qualificationStatus,
+              i.submitted_at AS submittedAt
          FROM invoice_items ii
          JOIN invoices i ON i.id = ii.invoice_id
         WHERE ii.id = ?
@@ -20,6 +21,23 @@ async function reviewItemCategory({ connection = pool, itemId, result, note, ope
     if (!item) {
       const error = new Error('商品明细不存在')
       error.statusCode = 404
+      error.expose = true
+      throw error
+    }
+
+    if (item.submittedAt) {
+      const error = new Error('发票已提交审核，不能再修改商品品类')
+      error.statusCode = 409
+      error.expose = true
+      throw error
+    }
+
+    if (
+      item.qualificationStatus !== 'pending'
+      && item.qualificationStatus !== 'pending_manual'
+    ) {
+      const error = new Error('当前发票状态不允许修改商品品类')
+      error.statusCode = 409
       error.expose = true
       throw error
     }
@@ -56,7 +74,10 @@ async function reviewItemCategory({ connection = pool, itemId, result, note, ope
         : Number(totals.totalCount) > 0 && Number(totals.approvedCount) === Number(totals.totalCount)
           ? '可以'
           : '存疑'
-    const qualificationStatus = invoiceResult === '可以' ? 'pending' : 'pending_manual'
+    const qualificationStatus = item.qualificationStatus === 'pending'
+      && invoiceResult === '存疑'
+      ? 'pending_manual'
+      : item.qualificationStatus
     const reason = `管理员确认商品“${item.itemName}”为${result}${note ? `：${note}` : ''}`
 
     await connection.execute(
@@ -223,6 +244,7 @@ async function createQualificationReviewLog({
   invoiceId,
   beforeData,
   afterData,
+  operationType = 'qualification_review',
 }) {
   await connection.execute(
     `INSERT INTO operation_logs
@@ -236,7 +258,7 @@ async function createQualificationReviewLog({
       )
      VALUES (
        ?,
-       'qualification_review',
+       ?,
        'invoice',
        ?,
        ?,
@@ -244,6 +266,7 @@ async function createQualificationReviewLog({
      )`,
     [
       operatorId,
+      operationType,
       invoiceId,
       JSON.stringify(beforeData),
       JSON.stringify(afterData),

@@ -14,6 +14,22 @@ async function reviewItemCategory(req, res, next) {
   }
 }
 
+async function submitInvoiceForReview(req, res, next) {
+  try {
+    const result = await invoiceReviewService.submitInvoiceForReview({
+      invoiceId: req.params.invoiceId,
+      operatorId: req.user.id,
+    })
+
+    res.json({
+      success: true,
+      data: result,
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
 async function reviewInvoiceQualification(req, res, next) {
   try {
     const result = await invoiceReviewService.reviewInvoiceQualification({
@@ -34,5 +50,6 @@ async function reviewInvoiceQualification(req, res, next) {
 
 module.exports = {
   reviewItemCategory,
+  submitInvoiceForReview,
   reviewInvoiceQualification,
 }

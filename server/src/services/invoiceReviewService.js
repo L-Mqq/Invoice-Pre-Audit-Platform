@@ -195,7 +195,11 @@ async function resolveApprovalDecision({
     }
   }
 
-  const submittedAt = invoice.submitted_at || new Date()
+  const submittedAt = invoice.submitted_at
+
+  if (!submittedAt) {
+    throw createHttpError(409, '发票尚未提交审核，无法计算自然周累计')
+  }
   const weekStart = await invoiceReviewRepository.getWeekStart({
     connection,
     date: submittedAt,
@@ -278,6 +282,105 @@ async function reviewItemCategory({ itemId, result, note, operatorId }) {
   }
 }
 
+// 提交审核的更新submitted_at的时间
+async function submitInvoiceForReview({
+  invoiceId,
+  operatorId,
+}) {
+  const normalizedInvoiceId = parsePositiveInteger(invoiceId, 'invoiceId')
+  const normalizedOperatorId = parsePositiveInteger(operatorId, 'operatorId')
+  const connection = await pool.getConnection()
+
+  try {
+    await connection.beginTransaction()
+
+    const invoice = await invoiceReviewRepository.findInvoiceForQualificationReview({
+      connection,
+      invoiceId: normalizedInvoiceId,
+    })
+
+    if (!invoice) {
+      throw createHttpError(404, '发票不存在')
+    }
+
+    if (invoice.submitted_at) {
+      throw createHttpError(409, '发票已提交审核，不能重复提交')
+    }
+
+    if (
+      invoice.qualification_status !== 'pending'
+      && invoice.qualification_status !== 'pending_manual'
+    ) {
+      throw createHttpError(409, '当前发票状态不能提交审核')
+    }
+
+    // 判断商品品类是否确认
+    const items = await invoiceReviewRepository.findItemsForQualificationReview({
+      connection,
+      invoiceId: normalizedInvoiceId,
+    })
+    const unresolvedItem = items.find(
+      (item) => !item.final_category_result || item.final_category_result === '存疑',
+    )
+
+    if (items.length === 0 || unresolvedItem) {
+      throw createHttpError(409, '请先完成全部商品的品类确认，再提交审核')
+    }
+
+    const submittedAt = new Date()
+    const qualificationReason = '管理员已提交审核，等待发票级审核'
+    const beforeData = {
+      qualificationStatus: invoice.qualification_status,
+      qualificationReason: invoice.qualification_reason,
+      submittedAt: invoice.submitted_at,
+    }
+
+    // 更新发票的资质状态为pending
+    await invoiceReviewRepository.updateInvoiceQualificationReview({
+      connection,
+      invoiceId: normalizedInvoiceId,
+      qualificationStatus: 'pending',
+      qualificationReason,
+      cumulativeAmount: invoice.cumulative_amount,
+      cumulativeWeekStart: invoice.cumulative_week_start,
+      submittedAt,
+      manualNote: invoice.manual_note,
+    })
+
+    const afterData = {
+      qualificationStatus: 'pending',
+      qualificationReason,
+      submittedAt,
+    }
+
+    // 创建发票的提交时间
+    await invoiceReviewRepository.createQualificationReviewLog({
+      connection,
+      operatorId: normalizedOperatorId,
+      invoiceId: normalizedInvoiceId,
+      beforeData,
+      afterData,
+      operationType: 'submit_qualification_review',
+    })
+
+    // 提交事务
+    await connection.commit()
+
+    return {
+      id: normalizedInvoiceId,
+      qualificationStatus: 'pending',
+      qualificationReason,
+      submittedAt,
+    }
+  } catch (error) {
+    await connection.rollback()
+    throw error
+  } finally {
+    connection.release()
+  }
+}
+
+// 进入审核更改资质审核的最终结果qualification_status
 async function reviewInvoiceQualification({
   invoiceId,
   action,
@@ -304,6 +407,10 @@ async function reviewInvoiceQualification({
 
     if (!invoice) {
       throw createHttpError(404, '发票不存在')
+    }
+
+    if (!invoice.submitted_at) {
+      throw createHttpError(409, '请先提交审核，再进行发票级审核')
     }
 
     if (invoice.qualification_status === 'cancelled') {
@@ -397,5 +504,6 @@ async function reviewInvoiceQualification({
 
 module.exports = {
   reviewItemCategory,
+  submitInvoiceForReview,
   reviewInvoiceQualification,
 }
