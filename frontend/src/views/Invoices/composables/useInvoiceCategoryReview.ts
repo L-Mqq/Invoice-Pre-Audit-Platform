@@ -13,6 +13,10 @@ interface UseInvoiceCategoryReviewOptions {
   loadInvoiceDetail: () => Promise<void>
 }
 
+function isCategoryReviewable(item: InvoiceDetailItem): boolean {
+  return !item.finalCategoryResult || item.finalCategoryResult === '存疑'
+}
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message
@@ -43,6 +47,11 @@ export function useInvoiceCategoryReview(
       return
     }
 
+    if (!isCategoryReviewable(selectedReviewItem.value)) {
+      ElMessage.warning('仅品类结果为“存疑”或未判断的商品允许人工确认')
+      return
+    }
+
     categoryReviewForm.result = selectedReviewItem.value.manualCategoryResult
       || selectedReviewItem.value.finalCategoryResult
       || '存疑'
@@ -64,6 +73,11 @@ export function useInvoiceCategoryReview(
 
     if (!selectedReviewItem.value) {
       ElMessage.warning('未选择需要人工确认的商品')
+      return
+    }
+
+    if (!isCategoryReviewable(selectedReviewItem.value)) {
+      ElMessage.warning('仅品类结果为“存疑”或未判断的商品允许人工确认')
       return
     }
 

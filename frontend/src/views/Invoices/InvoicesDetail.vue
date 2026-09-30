@@ -17,7 +17,6 @@ const router = useRouter()
 const qualificationReviewVisible = ref(false)
 
 const {
-  firstItemReason,
   getRouteInvoiceId,
   invoiceDetail,
   loadError,
@@ -75,8 +74,12 @@ function getManualCategoryReason(item: InvoiceDetailItem): string {
   return item.manualCategoryReason || '暂无人工确认依据'
 }
 
-function canReviewCategory(): boolean {
-  return isCategoryEditable.value
+function canReviewCategory(item: InvoiceDetailItem): boolean {
+  if (!isCategoryEditable.value) {
+    return false
+  }
+
+  return !item.finalCategoryResult || item.finalCategoryResult === '存疑'
 }
 
 function goBack() {
@@ -160,7 +163,6 @@ function openQualificationReview() {
 
           <InvoiceItemsTable
             :items="invoiceDetail.items"
-            :first-item-reason="firstItemReason"
             @view-evidence="openEvidenceDialog"
           />
 
@@ -244,7 +246,7 @@ function openQualificationReview() {
           关闭
         </el-button>
         <el-button
-          v-if="selectedReviewItem && canReviewCategory()"
+          v-if="selectedReviewItem && canReviewCategory(selectedReviewItem)"
           type="primary"
           @click="openCategoryReviewDialog"
         >

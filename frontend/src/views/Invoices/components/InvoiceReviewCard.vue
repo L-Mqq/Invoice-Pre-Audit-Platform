@@ -26,6 +26,28 @@ function getReviewStatusLabel(invoice: InvoiceDetail): string {
 
   return getQualificationStatusLabel(invoice.qualificationStatus)
 }
+
+// 品类的样式
+function getReviewStatusType(
+  invoice: InvoiceDetail,
+): 'success' | 'warning' | 'danger' | 'info' {
+  if (invoice.qualificationStatus === 'approved') {
+    return 'success'
+  }
+
+  if (invoice.qualificationStatus === 'rejected') {
+    return 'danger'
+  }
+
+  if (
+    invoice.qualificationStatus === 'pending_manual'
+    || invoice.qualificationStatus === 'pending_voucher'
+  ) {
+    return 'warning'
+  }
+
+  return 'info'
+}
 </script>
 
 <template>
@@ -35,7 +57,7 @@ function getReviewStatusLabel(invoice: InvoiceDetail): string {
   >
     <div class="card-title">
       <h2>预审结果</h2>
-      <el-tag type="warning">
+      <el-tag :type="getReviewStatusType(invoice)">
         {{ getReviewStatusLabel(invoice) }}
       </el-tag>
     </div>

@@ -45,7 +45,7 @@ export function useInvoiceReviewSubmission(
 
     return options.invoiceDetail.value.items.length > 0
       && options.invoiceDetail.value.items.every(
-        (item) => item.finalCategoryResult && item.finalCategoryResult !== '存疑',
+        (item) => item.finalCategoryResult === '可以',
       )
   })
 
@@ -62,7 +62,7 @@ export function useInvoiceReviewSubmission(
     const invoiceId = options.getRouteInvoiceId()
 
     if (!invoiceId || !canSubmitReview.value) {
-      ElMessage.warning('请先完成全部商品的品类确认，再提交审核')
+      ElMessage.warning('请先确保全部商品品类均为“可以”，再提交审核')
       return
     }
 

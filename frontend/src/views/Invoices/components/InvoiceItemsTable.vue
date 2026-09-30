@@ -3,7 +3,6 @@ import type { InvoiceDetailItem } from '../../../apis/invoices'
 
 defineProps<{
   items: InvoiceDetailItem[]
-  firstItemReason: string
 }>()
 
 const emit = defineEmits<{
@@ -26,6 +25,27 @@ function getPriceTypeLabel(priceType: InvoiceDetailItem['priceType']): string {
 
 function getCategoryResult(item: InvoiceDetailItem): string {
   return item.finalCategoryResult || item.manualCategoryResult || item.aiCategoryResult || '待判断'
+}
+
+// 品类的样式
+function getCategoryResultType(
+  item: InvoiceDetailItem,
+): 'success' | 'warning' | 'danger' | 'info' {
+  const result = getCategoryResult(item)
+
+  if (result === '可以') {
+    return 'success'
+  }
+
+  if (result === '不可以') {
+    return 'danger'
+  }
+
+  if (result === '存疑') {
+    return 'warning'
+  }
+
+  return 'info'
 }
 </script>
 
@@ -86,7 +106,7 @@ function getCategoryResult(item: InvoiceDetailItem): string {
       >
         <template #default="{ row }">
           <el-tag
-            type="warning"
+            :type="getCategoryResultType(row)"
             effect="plain"
           >
             {{ getCategoryResult(row) }}
@@ -108,11 +128,6 @@ function getCategoryResult(item: InvoiceDetailItem): string {
         </template>
       </el-table-column>
     </el-table>
-
-    <div class="reason-row">
-      <span>判断依据</span>
-      <p>{{ firstItemReason }}</p>
-    </div>
   </el-card>
 </template>
 
@@ -140,18 +155,4 @@ function getCategoryResult(item: InvoiceDetailItem): string {
   font-size: 12px;
 }
 
-.reason-row {
-  display: flex;
-  gap: 16px;
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px solid #f1f5f9;
-  color: #64748b;
-  font-size: 12px;
-}
-
-.reason-row p {
-  margin: 0;
-  color: #475569;
-}
 </style>
