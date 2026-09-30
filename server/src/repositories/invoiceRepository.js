@@ -200,12 +200,19 @@ async function findItemsByInvoiceId(invoiceId) {
 }
 
 async function updateQualificationByCategory({ connection = pool, id, categoryResult, reason }) {
-  if (categoryResult === '可以') return
+  if (categoryResult === '可以') {
+    return
+  }
+
+  const qualificationStatus = categoryResult === '不可以'
+    ? 'rejected'
+    : 'pending_manual'
+
   await connection.execute(
     `UPDATE invoices
-        SET qualification_status = 'pending_manual', qualification_reason = ?
+        SET qualification_status = ?, qualification_reason = ?
       WHERE id = ?`,
-    [reason, id],
+    [qualificationStatus, reason, id],
   )
 }
 

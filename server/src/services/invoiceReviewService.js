@@ -307,24 +307,24 @@ async function submitInvoiceForReview({
       throw createHttpError(409, '发票已提交审核，不能重复提交')
     }
 
-    if (
-      invoice.qualification_status !== 'pending'
-      && invoice.qualification_status !== 'pending_manual'
-    ) {
+    if (invoice.qualification_status !== 'pending') {
       throw createHttpError(409, '当前发票状态不能提交审核')
     }
 
-    // 判断商品品类是否确认
+    // 仅所有商品最终品类均为“可以”的发票可以提交审核。
     const items = await invoiceReviewRepository.findItemsForQualificationReview({
       connection,
       invoiceId: normalizedInvoiceId,
     })
-    const unresolvedItem = items.find(
-      (item) => !item.final_category_result || item.final_category_result === '存疑',
+    const nonApprovedItem = items.find(
+      (item) => item.final_category_result !== '可以',
     )
 
-    if (items.length === 0 || unresolvedItem) {
-      throw createHttpError(409, '请先完成全部商品的品类确认，再提交审核')
+    if (items.length === 0 || nonApprovedItem) {
+      throw createHttpError(
+        409,
+        `商品“${nonApprovedItem?.item_name || '未知'}”品类不是“可以”，不能提交审核`,
+      )
     }
 
     const submittedAt = new Date()

@@ -42,6 +42,18 @@ async function reviewItemCategory({ connection = pool, itemId, result, note, ope
       throw error
     }
 
+    if (
+      item.previousResult
+      && item.previousResult !== '存疑'
+    ) {
+      const error = new Error('仅品类结果为“存疑”的商品允许人工确认')
+
+      error.statusCode = 409
+      error.expose = true
+
+      throw error
+    }
+
     await connection.execute(
       `UPDATE invoice_items
           SET manual_category_result = ?,
@@ -74,11 +86,14 @@ async function reviewItemCategory({ connection = pool, itemId, result, note, ope
         : Number(totals.totalCount) > 0 && Number(totals.approvedCount) === Number(totals.totalCount)
           ? '可以'
           : '存疑'
-    const qualificationStatus = item.qualificationStatus === 'pending'
-      && invoiceResult === '存疑'
-      ? 'pending_manual'
-      : item.qualificationStatus
-    const reason = `管理员确认商品“${item.itemName}”为${result}${note ? `：${note}` : ''}`
+    const qualificationStatus = invoiceResult === '不可以'
+      ? 'rejected'
+      : invoiceResult === '存疑'
+        ? 'pending_manual'
+        : 'pending'
+    const reason = invoiceResult === '不可以'
+      ? `商品“${item.itemName}”品类人工确认结果为不可以${note ? `：${note}` : ''}`
+      : `管理员确认商品“${item.itemName}”为${result}${note ? `：${note}` : ''}`
 
     await connection.execute(
       `UPDATE invoices

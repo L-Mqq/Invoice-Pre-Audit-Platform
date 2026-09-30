@@ -50,7 +50,7 @@ async function judgeItems({ items, connection, persist = false }) {
   return {
     results,
     invoiceCategoryResult: hasRejected ? '不可以' : hasUncertain ? '存疑' : '可以',
-    requiresManualReview: hasRejected || hasUncertain,
+    requiresManualReview: hasUncertain,
     reason: results.filter((item) => item.categoryResult !== '可以').map((item) => `${item.itemName || item.itemId}：${item.reason}`).join('；') || '所有商品均通过品类判断',
   }
 }
