@@ -14,6 +14,7 @@ const invoiceReviewRouter = require('./src/routes/invoiceReview')
 const invoiceFileRouter = require('./src/routes/invoiceFile')
 const invoiceRouter = require('./src/routes/invoice')
 const voucherRouter = require('./src/routes/voucher')
+const voucherFileRouter = require('./src/routes/voucherFile')
 
 const app = express()
 const apiRouter = express.Router()
@@ -44,6 +45,7 @@ apiRouter.use('/invoice-review', invoiceReviewRouter)
 apiRouter.use('/invoice-files', invoiceFileRouter)
 apiRouter.use('/invoices', invoiceRouter)
 apiRouter.use('/vouchers', voucherRouter)
+apiRouter.use('/voucher-files', voucherFileRouter)
 
 // 业务路由统一挂载在 /api 下
 app.use('/api', apiRouter)

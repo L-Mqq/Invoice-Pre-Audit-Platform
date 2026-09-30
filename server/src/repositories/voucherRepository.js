@@ -68,6 +68,28 @@ async function findVoucherGroupById({
   return rows[0] || null
 }
 
+// 获取凭证文件的信息
+async function findVoucherFileById({
+  connection = pool,
+  voucherId,
+}) {
+  const [rows] = await connection.execute(
+    `SELECT
+       id,
+       voucher_group_id,
+       voucher_type,
+       original_name,
+       storage_key,
+       mime_type,
+       file_size
+     FROM vouchers
+     WHERE id = ?`,
+    [voucherId],
+  )
+
+  return rows[0] || null
+}
+
 // 创建上传凭证文件
 async function createVoucherFile({
   connection = pool,
@@ -277,6 +299,7 @@ async function createVoucherOperationLog({
   )
 }
 
+// 更新发票为pending在凭证通过之后
 async function updateInvoiceAfterVoucherApproval({
   connection = pool,
   invoiceId,
@@ -292,6 +315,7 @@ async function updateInvoiceAfterVoucherApproval({
   )
 }
 
+// 更新凭证审核的日志
 async function createInvoiceVoucherResolutionLog({
   connection = pool,
   operatorId,
@@ -326,6 +350,7 @@ module.exports = {
   createVoucherGroup,
   findGroupsByInvoiceId,
   findInvoiceById,
+  findVoucherFileById,
   findVoucherGroupById,
   getVoucherGroupCompleteness,
   hasApprovedCompleteGroup,
