@@ -128,6 +128,10 @@ function getCategoryResultType(
         </template>
       </el-table-column>
     </el-table>
+
+    <div class="table-scroll-hint">
+      左右滑动查看完整商品信息及审核依据
+    </div>
   </el-card>
 </template>
 
@@ -153,6 +157,13 @@ function getCategoryResultType(
 .card-caption {
   color: #94a3b8;
   font-size: 12px;
+}
+
+.table-scroll-hint {
+  margin-top: 10px;
+  color: #94a3b8;
+  font-size: 12px;
+  text-align: right;
 }
 
 </style>

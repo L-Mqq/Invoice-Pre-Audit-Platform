@@ -81,6 +81,32 @@ function getReviewStatusType(
       </div>
     </div>
 
+    <div
+      v-if="invoice.qualificationStatus === 'pending_voucher'"
+      class="voucher-actions"
+    >
+      <div class="voucher-status">
+        <span>凭证状态</span>
+        <strong>待提交凭证</strong>
+        <small>请准备订单截图和支付记录，两个文件齐全后由管理员核验。</small>
+      </div>
+
+      <div class="voucher-action-buttons">
+        <el-button
+          type="primary"
+          disabled
+        >
+          提交凭证
+        </el-button>
+        <el-button disabled>
+          查看凭证
+        </el-button>
+        <el-button disabled>
+          重新提交凭证
+        </el-button>
+      </div>
+    </div>
+
     <div class="review-actions">
       <div v-if="canSubmitReview">
         <strong>提交审核</strong>
@@ -179,6 +205,42 @@ function getReviewStatusType(
   gap: 4px;
 }
 
+.voucher-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid #fde68a;
+  border-radius: 10px;
+  background: #fffbeb;
+}
+
+.voucher-status {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.voucher-status span,
+.voucher-status small {
+  color: #a16207;
+  font-size: 12px;
+}
+
+.voucher-status strong {
+  color: #854d0e;
+  font-size: 14px;
+}
+
+.voucher-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 @media (max-width: 600px) {
   .review-result {
     grid-template-columns: 1fr;
@@ -187,6 +249,15 @@ function getReviewStatusType(
   .review-actions {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .voucher-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .voucher-action-buttons {
+    justify-content: flex-start;
   }
 }
 </style>
