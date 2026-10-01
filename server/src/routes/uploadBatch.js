@@ -2,6 +2,7 @@ const express = require('express')
 const multer = require('multer')
 const uploadBatchController = require('../controllers/uploadBatchController')
 const authMiddleware = require('../middlewares/auth')
+const normalizeUploadFileNames = require('../middlewares/normalizeUploadFileNames')
 
 const router = express.Router()
 router.use(authMiddleware)
@@ -15,7 +16,12 @@ const upload = multer({
   },
 })
 
-router.post('/', upload.array('files', 50), uploadBatchController.create)
+router.post(
+  '/',
+  upload.array('files', 50),
+  normalizeUploadFileNames,
+  uploadBatchController.create,
+)
 router.get('/:batchId', uploadBatchController.getById)
 
 module.exports = router

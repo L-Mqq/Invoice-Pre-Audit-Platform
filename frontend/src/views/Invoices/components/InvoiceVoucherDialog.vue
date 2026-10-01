@@ -6,6 +6,7 @@ import {
 } from 'vue'
 import {
   ElMessage,
+  type UploadFile,
   type UploadUserFile,
 } from 'element-plus'
 import type {
@@ -22,10 +23,12 @@ const props = defineProps<{
   actionLabel: string | null
   latestVoucherGroup: VoucherGroup | null
   submitting: boolean
+  previewing: boolean
 }>()
 
 const emit = defineEmits<{
   submit: [files: VoucherSubmissionFiles]
+  previewFile: [voucherId: number]
 }>()
 
 const activeTab = ref<VoucherType>('order_screenshot')
@@ -127,6 +130,27 @@ function getRawFiles(files: UploadUserFile[]): File[] {
   return files.flatMap((file) => file.raw ? [file.raw] : [])
 }
 
+function previewLocalFile(file: UploadFile) {
+  if (!file.raw) {
+    ElMessage.warning('该本地文件暂不支持预览')
+    return
+  }
+
+  const previewWindow = window.open('', '_blank')
+
+  if (!previewWindow) {
+    ElMessage.warning('浏览器阻止了预览窗口，请允许打开新标签页后重试')
+    return
+  }
+
+  const previewUrl = URL.createObjectURL(file.raw)
+
+  previewWindow.location.href = previewUrl
+  window.setTimeout(() => {
+    URL.revokeObjectURL(previewUrl)
+  }, 60_000)
+}
+
 function closeDialog() {
   visible.value = false
 }
@@ -188,6 +212,7 @@ watch(
               multiple
               :limit="10"
               :on-exceed="handleExceed"
+              :on-preview="previewLocalFile"
             >
               <div class="upload-trigger">
                 <strong>{{ isContinuingSubmission ? '补充订单截图' : '选择订单截图' }}</strong>
@@ -215,6 +240,7 @@ watch(
               multiple
               :limit="10"
               :on-exceed="handleExceed"
+              :on-preview="previewLocalFile"
             >
               <div class="upload-trigger">
                 <strong>{{ isContinuingSubmission ? '补充支付记录' : '选择支付记录' }}</strong>
@@ -230,11 +256,35 @@ watch(
           <div class="historical-voucher">
             <div>
               <span>订单截图</span>
-              <p>{{ historicalOrderFiles.map((file) => file.original_name).join('、') || '无' }}</p>
+              <div class="historical-file-links">
+                <el-button
+                  v-for="file in historicalOrderFiles"
+                  :key="file.id"
+                  link
+                  type="primary"
+                  :loading="previewing"
+                  @click="emit('previewFile', file.id)"
+                >
+                  {{ file.original_name }}
+                </el-button>
+                <p v-if="historicalOrderFiles.length === 0">无</p>
+              </div>
             </div>
             <div>
               <span>支付记录</span>
-              <p>{{ historicalPaymentFiles.map((file) => file.original_name).join('、') || '无' }}</p>
+              <div class="historical-file-links">
+                <el-button
+                  v-for="file in historicalPaymentFiles"
+                  :key="file.id"
+                  link
+                  type="primary"
+                  :loading="previewing"
+                  @click="emit('previewFile', file.id)"
+                >
+                  {{ file.original_name }}
+                </el-button>
+                <p v-if="historicalPaymentFiles.length === 0">无</p>
+              </div>
             </div>
           </div>
         </el-collapse-item>
@@ -318,7 +368,7 @@ watch(
   padding: 4px 0;
 }
 
-.historical-voucher div {
+.historical-voucher > div {
   display: grid;
   grid-template-columns: 80px minmax(0, 1fr);
   gap: 12px;
@@ -337,6 +387,13 @@ watch(
   overflow-wrap: anywhere;
 }
 
+.historical-file-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
 .submission-hint {
   margin: 0;
   color: #94a3b8;
@@ -345,7 +402,7 @@ watch(
 }
 
 @media (max-width: 480px) {
-  .historical-voucher div {
+  .historical-voucher > div {
     grid-template-columns: 1fr;
     gap: 4px;
   }

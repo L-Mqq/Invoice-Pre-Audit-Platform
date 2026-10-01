@@ -2,6 +2,7 @@ const AdmZip = require('adm-zip')
 const { randomUUID, createHash } = require('node:crypto')
 const fs = require('node:fs/promises')
 const path = require('node:path')
+const { normalizeUploadFileName } = require('../utils/fileName')
 const { pool } = require('../config/database')
 const uploadBatchRepository = require('../repositories/uploadBatchRepository')
 const invoiceFileRepository = require('../repositories/invoiceFileRepository')
@@ -45,7 +46,10 @@ function extractZip(file, batchId) {
     const entries = zip.getEntries()
     const pdfEntries = entries.filter((entry) => !entry.isDirectory && path.extname(entry.entryName).toLowerCase() === '.pdf')
     if (pdfEntries.length === 0) throw badRequest('ZIP 中未找到 PDF 文件')
-    return pdfEntries.map((entry) => createPdfItem(entry.getData(), path.basename(entry.entryName)))
+    return pdfEntries.map((entry) => createPdfItem(
+      entry.getData(),
+      normalizeUploadFileName(entry.entryName),
+    ))
   } catch (error) {
     // 保留业务校验错误，其他 AdmZip/解压异常统一转换为客户端可理解的 400。
     if (error.statusCode === 400 && error.expose) throw error
@@ -56,9 +60,13 @@ function extractZip(file, batchId) {
 // 创建上传批次
 async function createUploadBatch({ files, createdBy = null }) {
   if (!Array.isArray(files) || files.length === 0) throw badRequest('请至少上传一个 PDF 或 ZIP 文件')
-  const fileType = classify(files)
+  const normalizedFiles = files.map((file) => ({
+    ...file,
+    originalname: normalizeUploadFileName(file.originalname),
+  }))
+  const fileType = classify(normalizedFiles)
   const batchId = randomUUID()
-  const pdfFiles = fileType === 'zip' ? extractZip(files[0], batchId) : files.map((file) => createPdfItem(file.buffer, file.originalname, file.mimetype))
+  const pdfFiles = fileType === 'zip' ? extractZip(normalizedFiles[0], batchId) : normalizedFiles.map((file) => createPdfItem(file.buffer, file.originalname, file.mimetype))
   const storageDirectory = path.resolve(__dirname, '../../../storage', batchId)
   const savedPaths = []
   const connection = await pool.getConnection()
@@ -66,7 +74,7 @@ async function createUploadBatch({ files, createdBy = null }) {
   try {
     await fs.mkdir(storageDirectory, { recursive: true })
     await connection.beginTransaction()
-    const batch = await uploadBatchRepository.createBatch({ connection, id: batchId, originalName: files.length === 1 ? files[0].originalname : `${files.length} 个 PDF 文件`, fileType, totalCount: pdfFiles.length, createdBy })
+    const batch = await uploadBatchRepository.createBatch({ connection, id: batchId, originalName: normalizedFiles.length === 1 ? normalizedFiles[0].originalname : `${normalizedFiles.length} 个 PDF 文件`, fileType, totalCount: pdfFiles.length, createdBy })
     const storedFiles = []
 
     for (const file of pdfFiles) {

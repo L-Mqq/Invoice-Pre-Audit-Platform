@@ -281,7 +281,9 @@ async function handleVoucherDialogSubmit(
       :action-label="primaryVoucherActionLabel"
       :latest-voucher-group="latestVoucherGroup"
       :submitting="voucherSubmitting"
+      :previewing="voucherFilePreviewing"
       @submit="handleVoucherDialogSubmit"
+      @preview-file="previewVoucherFileById"
     />
 
     <InvoiceVoucherReviewDialog

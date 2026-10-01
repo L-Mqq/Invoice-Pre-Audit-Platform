@@ -2,6 +2,7 @@ const express = require('express')
 const multer = require('multer')
 const authMiddleware = require('../middlewares/auth')
 const voucherController = require('../controllers/voucherController')
+const normalizeUploadFileNames = require('../middlewares/normalizeUploadFileNames')
 
 const MAX_VOUCHER_FILE_SIZE = 10 * 1024 * 1024
 const ALLOWED_MIME_TYPES = new Set([
@@ -53,6 +54,7 @@ router.post(
 router.post(
   '/voucher-groups/:groupId/files/:voucherType',
   upload.single('file'),
+  normalizeUploadFileNames,
   voucherController.uploadVoucherFile,
 )
 // 更新凭证组审核信息

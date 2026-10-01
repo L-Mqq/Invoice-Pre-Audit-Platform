@@ -3,6 +3,7 @@ const fs = require('node:fs/promises')
 const path = require('node:path')
 const { pool } = require('../config/database')
 const voucherRepository = require('../repositories/voucherRepository')
+const { normalizeUploadFileName } = require('../utils/fileName')
 
 const VOUCHER_TYPES = new Set([
   'order_screenshot',
@@ -176,7 +177,8 @@ async function uploadVoucherFile({
       throw createHttpError(409, '已审核通过的凭证组不能继续上传文件')
     }
 
-    const storage = getVoucherStoragePath(group.invoice_id, file.originalname)
+    const originalName = normalizeUploadFileName(file.originalname)
+    const storage = getVoucherStoragePath(group.invoice_id, originalName)
     await fs.mkdir(path.dirname(storage.absolutePath), {
       recursive: true,
     })
@@ -187,7 +189,7 @@ async function uploadVoucherFile({
       connection,
       voucherGroupId: normalizedGroupId,
       voucherType,
-      originalName: path.basename(file.originalname),
+      originalName,
       storageKey: storage.storageKey,
       mimeType: file.mimetype || 'application/octet-stream',
       fileSize: file.size,
