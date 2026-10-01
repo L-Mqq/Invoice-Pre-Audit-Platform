@@ -121,6 +121,10 @@ export function useInvoiceVoucher(
     return voucherGroups.value.length > 0
   })
 
+  const showVoucherSection = computed(() => {
+    return isVoucherRequired.value || canViewVouchers.value
+  })
+
   // 获取凭证组
   async function loadVoucherGroups() {
     const invoice = options.invoiceDetail.value
@@ -128,7 +132,7 @@ export function useInvoiceVoucher(
     voucherGroups.value = []
     voucherGroupsError.value = ''
 
-    if (!invoice || invoice.qualificationStatus !== 'pending_voucher') {
+    if (!invoice) {
       return
     }
 
@@ -160,6 +164,7 @@ export function useInvoiceVoucher(
     latestVoucherGroup,
     loadVoucherGroups,
     primaryVoucherActionLabel,
+    showVoucherSection,
     voucherGroups,
     voucherGroupsError,
     voucherGroupsLoading,

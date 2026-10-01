@@ -9,6 +9,7 @@ defineProps<{
   isCategoryEditable: boolean
   submitReviewLoading: boolean
   isVoucherRequired: boolean
+  showVoucherSection: boolean
   voucherStatusLabel: string
   voucherStatusDescription: string
   voucherStatusType: 'success' | 'warning' | 'danger' | 'info'
@@ -92,7 +93,7 @@ function getReviewStatusType(
     </div>
 
     <div
-      v-if="isVoucherRequired"
+      v-if="showVoucherSection"
       class="voucher-actions"
     >
       <div class="voucher-status">
@@ -117,7 +118,7 @@ function getReviewStatusType(
 
       <div class="voucher-action-buttons">
         <el-button
-          v-if="primaryVoucherActionLabel"
+          v-if="isVoucherRequired && primaryVoucherActionLabel"
           type="primary"
           :loading="voucherGroupsLoading"
           :disabled="Boolean(voucherGroupsError)"

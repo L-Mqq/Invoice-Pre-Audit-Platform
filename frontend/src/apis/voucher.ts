@@ -34,6 +34,33 @@ export interface VoucherGroupsResponse {
   groups: VoucherGroup[]
 }
 
+export interface VoucherSubmissionFiles {
+  orderScreenshotFiles: File[]
+  paymentRecordFiles: File[]
+}
+
+export interface CreatedVoucherGroup {
+  id: number
+  invoiceId: number
+  groupName: string | null
+  reviewStatus: VoucherReviewStatus
+}
+
+export interface ReviewVoucherGroupPayload {
+  groupId: number
+  reviewStatus: 'approved' | 'rejected'
+  note: string
+}
+
+export interface ReviewVoucherGroupResponse {
+  groupId: number
+  invoiceId: number
+  reviewStatus: VoucherReviewStatus
+  reviewNote: string
+  invoiceQualificationStatus: string
+  invoiceQualificationReason: string | null
+}
+
 // 获取凭证组信息
 export async function getVoucherGroups(
   invoiceId: number,
@@ -49,6 +76,107 @@ export async function getVoucherGroups(
     if (axios.isAxiosError<{ message?: string }>(error)) {
       throw new Error(
         error.response?.data?.message || '获取凭证组失败',
+      )
+    }
+
+    throw error
+  }
+}
+
+// 创建凭证组
+export async function createVoucherGroup(
+  invoiceId: number,
+): Promise<CreatedVoucherGroup> {
+  try {
+    const response = await http.post<{
+      success: boolean
+      data: CreatedVoucherGroup
+    }>(`/vouchers/invoices/${invoiceId}/voucher-groups`, {})
+
+    return response.data.data
+  } catch (error: unknown) {
+    if (axios.isAxiosError<{ message?: string }>(error)) {
+      throw new Error(
+        error.response?.data?.message || '创建凭证组失败',
+      )
+    }
+
+    throw error
+  }
+}
+
+// 上传凭证文件
+export async function uploadVoucherFile(
+  groupId: number,
+  voucherType: VoucherType,
+  file: File,
+): Promise<void> {
+  const formData = new FormData()
+
+  formData.append('file', file)
+
+  try {
+    await http.post(
+      `/vouchers/voucher-groups/${groupId}/files/${voucherType}`,
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      },
+    )
+  } catch (error: unknown) {
+    if (axios.isAxiosError<{ message?: string }>(error)) {
+      throw new Error(
+        error.response?.data?.message || '上传凭证文件失败',
+      )
+    }
+
+    throw error
+  }
+}
+// 凭证文件预览接口
+export async function previewVoucherFile(
+  voucherId: number,
+): Promise<Blob> {
+  try {
+    const response = await http.get<Blob>(
+      `/voucher-files/${voucherId}/preview`,
+      {
+        responseType: 'blob',
+      },
+    )
+
+    return response.data
+  } catch (error: unknown) {
+    if (axios.isAxiosError<{ message?: string }>(error)) {
+      throw new Error(
+        error.response?.data?.message || '凭证文件预览失败',
+      )
+    }
+
+    throw error
+  }
+}
+
+// 凭证组审核接口
+export async function reviewVoucherGroup(
+  payload: ReviewVoucherGroupPayload,
+): Promise<ReviewVoucherGroupResponse> {
+  try {
+    const response = await http.patch<{
+      success: boolean
+      data: ReviewVoucherGroupResponse
+    }>(`/vouchers/voucher-groups/${payload.groupId}/review`, {
+      reviewStatus: payload.reviewStatus,
+      note: payload.note,
+    })
+
+    return response.data.data
+  } catch (error: unknown) {
+    if (axios.isAxiosError<{ message?: string }>(error)) {
+      throw new Error(
+        error.response?.data?.message || '凭证审核失败',
       )
     }
 

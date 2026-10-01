@@ -5,6 +5,7 @@ import {
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import type { InvoiceDetailItem } from '../../apis/invoices'
+import type { VoucherSubmissionFiles } from '../../apis/voucher'
 import InvoiceBasicInfo from './components/InvoiceBasicInfo.vue'
 import InvoiceItemsTable from './components/InvoiceItemsTable.vue'
 import InvoicePreviewCard from './components/InvoicePreviewCard.vue'
@@ -12,15 +13,20 @@ import InvoiceQualificationReviewDialog from './components/InvoiceQualificationR
 import InvoiceReviewCard from './components/InvoiceReviewCard.vue'
 import InvoiceStatusStrip from './components/InvoiceStatusStrip.vue'
 import InvoiceVoucherDialog from './components/InvoiceVoucherDialog.vue'
+import InvoiceVoucherReviewDialog from './components/InvoiceVoucherReviewDialog.vue'
 import { useInvoiceCategoryReview } from './composables/useInvoiceCategoryReview'
 import { useInvoiceDetail } from './composables/useInvoiceDetail'
 import { useInvoiceFileActions } from './composables/useInvoiceFileActions'
 import { useInvoiceReviewSubmission } from './composables/useInvoiceReviewSubmission'
 import { useInvoiceVoucher } from './composables/useInvoiceVoucher'
+import { useVoucherFileActions } from './composables/useVoucherFileActions'
+import { useVoucherReview } from './composables/useVoucherReview'
+import { useVoucherSubmission } from './composables/useVoucherSubmission'
 
 const router = useRouter()
 const qualificationReviewVisible = ref(false)
 const voucherDialogVisible = ref(false)
+const voucherReviewDialogVisible = ref(false)
 
 const {
   getRouteInvoiceId,
@@ -68,7 +74,10 @@ const {
   canViewVouchers,
   isVoucherRequired,
   latestVoucherGroup,
+  loadVoucherGroups,
   primaryVoucherActionLabel,
+  showVoucherSection,
+  voucherGroups,
   voucherGroupsError,
   voucherGroupsLoading,
   voucherStatusDescription,
@@ -76,6 +85,29 @@ const {
   voucherStatusType,
 } = useInvoiceVoucher({
   invoiceDetail,
+})
+
+const {
+  previewVoucherFileById,
+  voucherFilePreviewing,
+} = useVoucherFileActions()
+
+const {
+  submitVoucherReview,
+  voucherReviewSubmitting,
+} = useVoucherReview({
+  loadInvoiceDetail,
+  loadVoucherGroups,
+})
+
+const {
+  submitVoucherFiles,
+  voucherSubmitting,
+} = useVoucherSubmission({
+  invoiceDetail,
+  latestVoucherGroup,
+  loadInvoiceDetail,
+  loadVoucherGroups,
 })
 
 function formatAmount(amount: number | string | null): string {
@@ -117,11 +149,17 @@ function handleSubmitVoucher() {
 }
 
 function handleViewVoucher() {
-  ElMessage.info('凭证查看弹窗待接入')
+  voucherReviewDialogVisible.value = true
 }
 
-function handleVoucherDialogSubmit() {
-  ElMessage.info('已完成本地文件校验，凭证提交接口待接入')
+async function handleVoucherDialogSubmit(
+  files: VoucherSubmissionFiles,
+) {
+  const isSubmitted = await submitVoucherFiles(files)
+
+  if (isSubmitted) {
+    voucherDialogVisible.value = false
+  }
 }
 
 </script>
@@ -205,6 +243,7 @@ function handleVoucherDialogSubmit() {
             :is-category-editable="isCategoryEditable"
             :submit-review-loading="submitReviewLoading"
             :is-voucher-required="isVoucherRequired"
+            :show-voucher-section="showVoucherSection"
             :voucher-status-label="voucherStatusLabel"
             :voucher-status-description="voucherStatusDescription"
             :voucher-status-type="voucherStatusType"
@@ -241,7 +280,17 @@ function handleVoucherDialogSubmit() {
       v-model:visible="voucherDialogVisible"
       :action-label="primaryVoucherActionLabel"
       :latest-voucher-group="latestVoucherGroup"
+      :submitting="voucherSubmitting"
       @submit="handleVoucherDialogSubmit"
+    />
+
+    <InvoiceVoucherReviewDialog
+      v-model:visible="voucherReviewDialogVisible"
+      :voucher-groups="voucherGroups"
+      :previewing="voucherFilePreviewing"
+      :reviewing="voucherReviewSubmitting"
+      @preview-file="previewVoucherFileById"
+      @review="submitVoucherReview"
     />
 
     <el-dialog

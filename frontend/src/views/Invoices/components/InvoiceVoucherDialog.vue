@@ -10,6 +10,7 @@ import {
 } from 'element-plus'
 import type {
   VoucherGroup,
+  VoucherSubmissionFiles,
   VoucherType,
 } from '../../../apis/voucher'
 
@@ -20,10 +21,11 @@ const visible = defineModel<boolean>('visible', {
 const props = defineProps<{
   actionLabel: string | null
   latestVoucherGroup: VoucherGroup | null
+  submitting: boolean
 }>()
 
 const emit = defineEmits<{
-  submit: []
+  submit: [files: VoucherSubmissionFiles]
 }>()
 
 const activeTab = ref<VoucherType>('order_screenshot')
@@ -31,12 +33,50 @@ const orderScreenshotFiles = ref<UploadUserFile[]>([])
 const paymentRecordFiles = ref<UploadUserFile[]>([])
 
 const canSubmitVoucher = computed(() => {
-  return orderScreenshotFiles.value.length > 0
-    && paymentRecordFiles.value.length > 0
+  return orderScreenshotFileCount.value > 0
+    && paymentRecordFileCount.value > 0
+    && hasSelectedFiles.value
 })
 
 const isResubmission = computed(() => {
   return props.latestVoucherGroup?.review_status === 'rejected'
+})
+
+const isContinuingSubmission = computed(() => {
+  return props.latestVoucherGroup?.review_status === 'pending_upload'
+})
+
+const existingOrderScreenshotCount = computed(() => {
+  if (!isContinuingSubmission.value) {
+    return 0
+  }
+
+  return props.latestVoucherGroup?.files.filter(
+    (file) => file.voucher_type === 'order_screenshot',
+  ).length || 0
+})
+
+const existingPaymentRecordCount = computed(() => {
+  if (!isContinuingSubmission.value) {
+    return 0
+  }
+
+  return props.latestVoucherGroup?.files.filter(
+    (file) => file.voucher_type === 'payment_record',
+  ).length || 0
+})
+
+const orderScreenshotFileCount = computed(() => {
+  return existingOrderScreenshotCount.value + orderScreenshotFiles.value.length
+})
+
+const paymentRecordFileCount = computed(() => {
+  return existingPaymentRecordCount.value + paymentRecordFiles.value.length
+})
+
+const hasSelectedFiles = computed(() => {
+  return orderScreenshotFiles.value.length > 0
+    || paymentRecordFiles.value.length > 0
 })
 
 const historicalOrderFiles = computed(() => {
@@ -67,7 +107,24 @@ function handleSubmit() {
     return
   }
 
-  emit('submit')
+  const files = {
+    orderScreenshotFiles: getRawFiles(orderScreenshotFiles.value),
+    paymentRecordFiles: getRawFiles(paymentRecordFiles.value),
+  }
+
+  if (
+    files.orderScreenshotFiles.length === 0
+    && files.paymentRecordFiles.length === 0
+  ) {
+    ElMessage.warning('请选择有效的凭证文件')
+    return
+  }
+
+  emit('submit', files)
+}
+
+function getRawFiles(files: UploadUserFile[]): File[] {
+  return files.flatMap((file) => file.raw ? [file.raw] : [])
 }
 
 function closeDialog() {
@@ -114,7 +171,7 @@ watch(
 
       <el-tabs v-model="activeTab">
         <el-tab-pane
-          :label="`订单截图（${orderScreenshotFiles.length}）`"
+          :label="`订单截图（${orderScreenshotFileCount}）`"
           name="order_screenshot"
         >
           <div class="upload-section">
@@ -133,7 +190,7 @@ watch(
               :on-exceed="handleExceed"
             >
               <div class="upload-trigger">
-                <strong>选择订单截图</strong>
+                <strong>{{ isContinuingSubmission ? '补充订单截图' : '选择订单截图' }}</strong>
                 <span>支持 JPG、PNG、WEBP、PDF，单个文件不超过 10MB</span>
               </div>
             </el-upload>
@@ -141,7 +198,7 @@ watch(
         </el-tab-pane>
 
         <el-tab-pane
-          :label="`支付记录（${paymentRecordFiles.length}）`"
+          :label="`支付记录（${paymentRecordFileCount}）`"
           name="payment_record"
         >
           <div class="upload-section">
@@ -160,7 +217,7 @@ watch(
               :on-exceed="handleExceed"
             >
               <div class="upload-trigger">
-                <strong>选择支付记录</strong>
+                <strong>{{ isContinuingSubmission ? '补充支付记录' : '选择支付记录' }}</strong>
                 <span>支持 JPG、PNG、WEBP、PDF，单个文件不超过 10MB</span>
               </div>
             </el-upload>
@@ -184,7 +241,9 @@ watch(
       </el-collapse>
 
       <p class="submission-hint">
-        仅完成本地文件选择；凭证组创建与文件上传接口将在下一步接入。
+        {{ isContinuingSubmission
+          ? '已上传文件会保留在当前凭证组中；本次仅需补齐缺失材料。'
+          : '提交后将创建新的凭证组，并上传本次选择的全部文件。' }}
       </p>
     </div>
 
@@ -194,7 +253,8 @@ watch(
       </el-button>
       <el-button
         type="primary"
-        :disabled="!canSubmitVoucher"
+        :loading="submitting"
+        :disabled="!canSubmitVoucher || submitting"
         @click="handleSubmit"
       >
         {{ actionLabel || '提交凭证' }}
