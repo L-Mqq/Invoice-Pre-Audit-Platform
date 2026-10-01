@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { InvoiceDetail } from '../../../apis/invoices'
+import type { WeeklyVoucherRequirement } from '../../../apis/voucher'
 import {
   getFinanceStatusLabel,
   getQualificationStatusLabel,
@@ -8,6 +9,7 @@ import {
 
 defineProps<{
   invoice: InvoiceDetail
+  weeklyVoucherRequirement: WeeklyVoucherRequirement | null
 }>()
 
 function getReviewStatusLabel(invoice: InvoiceDetail): string {
@@ -20,7 +22,12 @@ function getReviewStatusLabel(invoice: InvoiceDetail): string {
 </script>
 
 <template>
-  <div class="status-strip">
+  <div
+    class="status-strip"
+    :class="{
+      'has-weekly-voucher-requirement': weeklyVoucherRequirement,
+    }"
+  >
     <div>
       <span>资质审核</span>
       <el-tag type="warning">
@@ -37,6 +44,15 @@ function getReviewStatusLabel(invoice: InvoiceDetail): string {
       <span>最终报销</span>
       <el-tag effect="plain">
         {{ getReimbursementStatusLabel(invoice.reimbursementStatus) }}
+      </el-tag>
+    </div>
+    <div v-if="weeklyVoucherRequirement">
+      <span>周累计凭证</span>
+      <el-tag
+        type="warning"
+        effect="plain"
+      >
+        待补齐 {{ weeklyVoucherRequirement.approvedInvoiceCount }}/{{ weeklyVoucherRequirement.totalInvoiceCount }}
       </el-tag>
     </div>
   </div>
@@ -65,6 +81,10 @@ function getReviewStatusLabel(invoice: InvoiceDetail): string {
 .status-strip span {
   color: #64748b;
   font-size: 13px;
+}
+
+.status-strip.has-weekly-voucher-requirement {
+  grid-template-columns: repeat(4, 1fr);
 }
 
 @media (max-width: 720px) {

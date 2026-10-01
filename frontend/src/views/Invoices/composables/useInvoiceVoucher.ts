@@ -222,6 +222,7 @@ export function useInvoiceVoucher(
     voucherStatusDescription,
     voucherStatusLabel,
     voucherStatusType,
+    pendingWeeklyVoucherRequirement,
     weeklyVoucherRequirements,
     weeklyVoucherRequirementsError,
     weeklyVoucherRequirementsLoading,

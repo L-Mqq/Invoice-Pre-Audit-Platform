@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { InvoiceDetail } from '../../../apis/invoices'
+import type { WeeklyVoucherRequirement } from '../../../apis/voucher'
 import { formatChinaDate } from '../../../utils/date'
 import { getQualificationStatusLabel } from '../../../utils/status'
 
@@ -14,6 +15,7 @@ defineProps<{
   voucherStatusLabel: string
   voucherStatusDescription: string
   voucherStatusType: 'success' | 'warning' | 'danger' | 'info'
+  weeklyVoucherRequirement: WeeklyVoucherRequirement | null
   primaryVoucherActionLabel: string | null
   canViewVouchers: boolean
   voucherGroupsLoading: boolean
@@ -89,6 +91,16 @@ function getReviewStatusType(
 
   return 'info'
 }
+
+function getWeeklyVoucherRequirementDescription(
+  requirement: WeeklyVoucherRequirement,
+): string {
+  const currentInvoiceDescription = requirement.currentInvoice.voucherStatus === 'pending'
+    ? '当前发票仍需补齐支付凭证。'
+    : '当前发票凭证已完成，正在等待其余关联发票完成。'
+
+  return `同一销售方本自然周累计 ¥${Number(requirement.triggeredCumulativeAmount).toFixed(2)}，关联发票凭证已完成 ${requirement.approvedInvoiceCount}/${requirement.totalInvoiceCount}。${currentInvoiceDescription}`
+}
 </script>
 
 <template>
@@ -98,9 +110,18 @@ function getReviewStatusType(
   >
     <div class="card-title">
       <h2>预审结果</h2>
-      <el-tag :type="getReviewStatusType(invoice)">
-        {{ getReviewStatusLabel(invoice) }}
-      </el-tag>
+      <div class="review-status-tags">
+        <el-tag :type="getReviewStatusType(invoice)">
+          {{ getReviewStatusLabel(invoice) }}
+        </el-tag>
+        <el-tag
+          v-if="weeklyVoucherRequirement"
+          type="warning"
+          effect="plain"
+        >
+          周累计凭证待补齐
+        </el-tag>
+      </div>
     </div>
 
     <div class="review-result">
@@ -121,6 +142,16 @@ function getReviewStatusType(
         <strong>{{ invoice.manualNote || '暂无备注' }}</strong>
       </div>
     </div>
+
+    <el-alert
+      v-if="weeklyVoucherRequirement"
+      class="weekly-voucher-requirement"
+      title="周累计凭证任务未完成"
+      :description="getWeeklyVoucherRequirementDescription(weeklyVoucherRequirement)"
+      type="warning"
+      :closable="false"
+      show-icon
+    />
 
     <div
       v-if="showVoucherSection"
@@ -232,6 +263,13 @@ function getReviewStatusType(
   font-size: 17px;
 }
 
+.review-status-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .review-result {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -285,6 +323,10 @@ function getReviewStatusType(
   border: 1px solid #fde68a;
   border-radius: 10px;
   background: #fffbeb;
+}
+
+.weekly-voucher-requirement {
+  margin-top: 16px;
 }
 
 .voucher-status {

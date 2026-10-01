@@ -6,7 +6,9 @@ import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import type { InvoiceDetailItem } from '../../apis/invoices'
 import type { InvoiceQualificationAction } from '../../apis/invoiceReview'
-import type { VoucherSubmissionFiles } from '../../apis/voucher'
+import type {
+  VoucherSubmissionFiles,
+} from '../../apis/voucher'
 import InvoiceBasicInfo from './components/InvoiceBasicInfo.vue'
 import InvoiceItemsTable from './components/InvoiceItemsTable.vue'
 import InvoicePreviewCard from './components/InvoicePreviewCard.vue'
@@ -79,6 +81,7 @@ const {
   latestVoucherGroup,
   loadVoucherGroups,
   loadWeeklyVoucherRequirements,
+  pendingWeeklyVoucherRequirement,
   primaryVoucherActionLabel,
   showVoucherSection,
   voucherGroups,
@@ -263,7 +266,10 @@ async function handleQualificationReview(
     </el-alert>
 
     <template v-else-if="invoiceDetail">
-      <InvoiceStatusStrip :invoice="invoiceDetail" />
+      <InvoiceStatusStrip
+        :invoice="invoiceDetail"
+        :weekly-voucher-requirement="pendingWeeklyVoucherRequirement"
+      />
 
       <div class="detail-grid">
         <div class="main-column">
@@ -288,6 +294,7 @@ async function handleQualificationReview(
             :voucher-status-label="voucherStatusLabel"
             :voucher-status-description="voucherStatusDescription"
             :voucher-status-type="voucherStatusType"
+            :weekly-voucher-requirement="pendingWeeklyVoucherRequirement"
             :primary-voucher-action-label="primaryVoucherActionLabel"
             :can-view-vouchers="canViewVouchers"
             :voucher-groups-loading="voucherGroupsLoading"
