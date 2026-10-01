@@ -128,6 +128,7 @@ function amountToCents(value) {
   return Math.round(Number(value || 0) * 100)
 }
 
+// 计算累计金额
 function sumInvoiceAmountsInCents(invoices) {
   return invoices.reduce(
     (total, invoice) => total + amountToCents(invoice.total_amount),
@@ -162,6 +163,7 @@ async function resolveApprovalDecision({
   connection,
   invoice,
   items,
+  findApprovedInvoicesForWeek = invoiceReviewRepository.findApprovedInvoicesForWeek,
 }) {
   const categoryDecision = getCategoryDecision(items)
   if (categoryDecision) {
@@ -204,14 +206,15 @@ async function resolveApprovalDecision({
     connection,
     date: submittedAt,
   })
-  const approvedInvoices = await invoiceReviewRepository.findApprovedInvoicesForWeek({
+  const approvedInvoices = await findApprovedInvoicesForWeek({
     connection,
     invoiceId: invoice.id,
     sellerTaxId: invoice.seller_tax_id,
     weekStart,
   })
+  const priorCumulativeAmount = sumInvoiceAmountsInCents(approvedInvoices) / 100
   const cumulativeAmount = (
-    sumInvoiceAmountsInCents(approvedInvoices) + amountToCents(invoice.total_amount)
+    amountToCents(priorCumulativeAmount) + amountToCents(invoice.total_amount)
   ) / 100
 
   if (cumulativeAmount > 3000) {
@@ -221,6 +224,7 @@ async function resolveApprovalDecision({
       cumulativeAmount,
       cumulativeWeekStart: weekStart,
       submittedAt,
+      priorCumulativeAmount,
     }
   }
 
@@ -242,6 +246,7 @@ async function resolveApprovalDecision({
         cumulativeAmount,
         cumulativeWeekStart: weekStart,
         submittedAt,
+        priorCumulativeAmount,
       }
     }
   }
@@ -252,6 +257,51 @@ async function resolveApprovalDecision({
     cumulativeAmount,
     cumulativeWeekStart: weekStart,
     submittedAt,
+    priorCumulativeAmount,
+  }
+}
+
+// 预览规则计算结果，不更新发票状态、累计字段或操作日志。
+async function getInvoiceQualificationPreview({
+  invoiceId,
+}) {
+  const normalizedInvoiceId = parsePositiveInteger(invoiceId, 'invoiceId')
+  const invoice = await invoiceReviewRepository.findInvoiceForQualificationPreview({
+    invoiceId: normalizedInvoiceId,
+  })
+
+  if (!invoice) {
+    throw createHttpError(404, '发票不存在')
+  }
+
+  if (!invoice.submitted_at) {
+    throw createHttpError(409, '请先提交审核，再查看规则预览')
+  }
+
+  if (invoice.qualification_status === 'cancelled') {
+    throw createHttpError(409, '已取消的发票不能查看审核预览')
+  }
+
+  const items = await invoiceReviewRepository.findItemsForQualificationPreview({
+    invoiceId: normalizedInvoiceId,
+  })
+  const decision = await resolveApprovalDecision({
+    connection: pool,
+    invoice,
+    items,
+    findApprovedInvoicesForWeek: invoiceReviewRepository.findApprovedInvoicesForWeekPreview,
+  })
+
+  return {
+    invoiceId: normalizedInvoiceId,
+    priorCumulativeAmount: decision.priorCumulativeAmount ?? null,
+    currentInvoiceAmount: amountToCents(invoice.total_amount) / 100,
+    projectedCumulativeAmount: decision.cumulativeAmount,
+    cumulativeWeekStart: decision.cumulativeWeekStart,
+    projectedQualificationStatus: decision.qualificationStatus,
+    projectedQualificationReason: decision.qualificationReason,
+    requiresVoucher: decision.qualificationStatus === 'pending_voucher',
+    calculable: decision.cumulativeAmount !== null,
   }
 }
 // 单独审核某个商品的品类（人工改判）
@@ -505,5 +555,6 @@ async function reviewInvoiceQualification({
 module.exports = {
   reviewItemCategory,
   submitInvoiceForReview,
+  getInvoiceQualificationPreview,
   reviewInvoiceQualification,
 }

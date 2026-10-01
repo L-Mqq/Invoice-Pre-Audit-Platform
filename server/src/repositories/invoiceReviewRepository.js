@@ -153,6 +153,30 @@ async function findInvoiceForQualificationReview({
   return rows[0] || null
 }
 
+// 查询发票级审核预览所需信息；预览不修改数据，因此不加行锁。
+async function findInvoiceForQualificationPreview({
+  connection = pool,
+  invoiceId,
+}) {
+  const [rows] = await connection.execute(
+    `SELECT
+       id,
+       seller_tax_id,
+       total_amount,
+       submitted_at,
+       qualification_status,
+       qualification_reason,
+       cumulative_amount,
+       cumulative_week_start,
+       manual_note
+     FROM invoices
+     WHERE id = ?`,
+    [invoiceId],
+  )
+
+  return rows[0] || null
+}
+
 // 查商品级信息
 async function findItemsForQualificationReview({
   connection = pool,
@@ -171,6 +195,29 @@ async function findItemsForQualificationReview({
      WHERE invoice_id = ?
      ORDER BY id
      FOR UPDATE`,
+    [invoiceId],
+  )
+
+  return rows
+}
+
+// 查询商品明细供审核预览使用；不加锁，正式审核时仍使用锁定查询。
+async function findItemsForQualificationPreview({
+  connection = pool,
+  invoiceId,
+}) {
+  const [rows] = await connection.execute(
+    `SELECT
+       id,
+       item_name,
+       unit_price,
+       price_type,
+       ai_category_reason,
+       manual_category_reason,
+       final_category_result
+     FROM invoice_items
+     WHERE invoice_id = ?
+     ORDER BY id`,
     [invoiceId],
   )
 
@@ -210,6 +257,28 @@ async function findApprovedInvoicesForWeek({
        AND qualification_status = 'approved'
        AND id <> ?
      FOR UPDATE`,
+    [sellerTaxId, weekStart, invoiceId],
+  )
+
+  return rows
+}
+
+// 查询同周已审核通过发票供预览使用；正式审核时仍使用 FOR UPDATE。
+async function findApprovedInvoicesForWeekPreview({
+  connection = pool,
+  invoiceId,
+  sellerTaxId,
+  weekStart,
+}) {
+  const [rows] = await connection.execute(
+    `SELECT
+       id,
+       total_amount
+     FROM invoices
+     WHERE seller_tax_id = ?
+       AND cumulative_week_start = ?
+       AND qualification_status = 'approved'
+       AND id <> ?`,
     [sellerTaxId, weekStart, invoiceId],
   )
 
@@ -292,9 +361,12 @@ async function createQualificationReviewLog({
 module.exports = {
   reviewItemCategory,
   findInvoiceForQualificationReview,
+  findInvoiceForQualificationPreview,
   findItemsForQualificationReview,
+  findItemsForQualificationPreview,
   getWeekStart,
   findApprovedInvoicesForWeek,
+  findApprovedInvoicesForWeekPreview,
   updateInvoiceQualificationReview,
   createQualificationReviewLog,
 }

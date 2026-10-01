@@ -14,6 +14,7 @@ async function reviewItemCategory(req, res, next) {
   }
 }
 
+// 提交审核
 async function submitInvoiceForReview(req, res, next) {
   try {
     const result = await invoiceReviewService.submitInvoiceForReview({
@@ -30,6 +31,23 @@ async function submitInvoiceForReview(req, res, next) {
   }
 }
 
+// 获取周累计金额
+async function getInvoiceQualificationPreview(req, res, next) {
+  try {
+    const result = await invoiceReviewService.getInvoiceQualificationPreview({
+      invoiceId: req.params.invoiceId,
+    })
+
+    res.json({
+      success: true,
+      data: result,
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
+// 发票级审核
 async function reviewInvoiceQualification(req, res, next) {
   try {
     const result = await invoiceReviewService.reviewInvoiceQualification({
@@ -51,5 +69,6 @@ async function reviewInvoiceQualification(req, res, next) {
 module.exports = {
   reviewItemCategory,
   submitInvoiceForReview,
+  getInvoiceQualificationPreview,
   reviewInvoiceQualification,
 }
