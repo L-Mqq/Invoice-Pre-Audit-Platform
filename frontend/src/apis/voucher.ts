@@ -59,6 +59,59 @@ export interface ReviewVoucherGroupResponse {
   reviewNote: string
   invoiceQualificationStatus: string
   invoiceQualificationReason: string | null
+  completedRequirementIds: number[]
+  triggerInvoiceIdsReadyForRuleReview: number[]
+}
+
+export type WeeklyVoucherRequirementStatus = 'pending' | 'completed' | 'cancelled'
+
+export type WeeklyVoucherRequirementInvoiceStatus = 'pending' | 'approved' | 'cancelled'
+
+export interface WeeklyVoucherRequirementInvoice {
+  requirementInvoiceId: number
+  invoiceId: number
+  invoiceNumber: string | null
+  sellerName: string | null
+  totalAmount: number | string
+  qualificationStatus: string
+  financeStatus: string
+  reimbursementStatus: string
+  invoiceRole: 'existing' | 'trigger'
+  voucherStatus: WeeklyVoucherRequirementInvoiceStatus
+  approvedVoucherGroupId: number | null
+  completedAt: string | null
+  canSubmitVoucher: boolean
+}
+
+export interface WeeklyVoucherRequirement {
+  id: number
+  sellerTaxId: string
+  cumulativeWeekStart: string
+  triggerInvoiceId: number
+  triggeredCumulativeAmount: number | string
+  status: WeeklyVoucherRequirementStatus
+  completedAt: string | null
+  cancelledAt: string | null
+  createdAt: string
+  updatedAt: string
+  currentInvoice: {
+    requirementInvoiceId: number
+    invoiceRole: 'existing' | 'trigger'
+    voucherStatus: WeeklyVoucherRequirementInvoiceStatus
+    approvedVoucherGroupId: number | null
+    completedAt: string | null
+  }
+  blocksFinanceSubmission: boolean
+  totalInvoiceCount: number
+  approvedInvoiceCount: number
+  pendingInvoiceCount: number
+  cancelledInvoiceCount: number
+  invoices: WeeklyVoucherRequirementInvoice[]
+}
+
+export interface WeeklyVoucherRequirementsResponse {
+  invoiceId: number
+  requirements: WeeklyVoucherRequirement[]
 }
 
 // 获取凭证组信息
@@ -76,6 +129,28 @@ export async function getVoucherGroups(
     if (axios.isAxiosError<{ message?: string }>(error)) {
       throw new Error(
         error.response?.data?.message || '获取凭证组失败',
+      )
+    }
+
+    throw error
+  }
+}
+
+// 获取发票参与的周累计凭证任务及关联发票进度。
+export async function getWeeklyVoucherRequirements(
+  invoiceId: number,
+): Promise<WeeklyVoucherRequirementsResponse> {
+  try {
+    const response = await http.get<{
+      success: boolean
+      data: WeeklyVoucherRequirementsResponse
+    }>(`/vouchers/invoices/${invoiceId}/weekly-voucher-requirements`)
+
+    return response.data.data
+  } catch (error: unknown) {
+    if (axios.isAxiosError<{ message?: string }>(error)) {
+      throw new Error(
+        error.response?.data?.message || '获取周累计凭证任务失败',
       )
     }
 

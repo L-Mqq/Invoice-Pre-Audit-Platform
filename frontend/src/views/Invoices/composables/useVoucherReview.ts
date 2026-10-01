@@ -10,6 +10,7 @@ import {
 interface UseVoucherReviewOptions {
   loadInvoiceDetail: () => Promise<void>
   loadVoucherGroups: () => Promise<void>
+  loadWeeklyVoucherRequirements: () => Promise<void>
 }
 
 function getErrorMessage(error: unknown): string {
@@ -35,10 +36,13 @@ export function useVoucherReview(
 
       await options.loadInvoiceDetail()
       await options.loadVoucherGroups()
+      await options.loadWeeklyVoucherRequirements()
 
       ElMessage.success(
-        result.reviewStatus === 'approved'
-          ? '凭证审核通过，发票已进入下一处理阶段'
+        result.triggerInvoiceIdsReadyForRuleReview.length > 0
+          ? '关联发票凭证已全部完成，触发发票可重新执行规则审核'
+          : result.reviewStatus === 'approved'
+          ? '凭证审核通过，等待其他关联发票完成凭证'
           : '凭证已驳回，等待重新提交',
       )
     } catch (error) {

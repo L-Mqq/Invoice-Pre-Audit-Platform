@@ -15,9 +15,11 @@ import type { InvoiceDetail } from '../../../apis/invoices'
 
 interface UseVoucherSubmissionOptions {
   invoiceDetail: Ref<InvoiceDetail | null>
+  canSubmitVoucher: ComputedRef<boolean>
   latestVoucherGroup: ComputedRef<VoucherGroup | null>
   loadInvoiceDetail: () => Promise<void>
   loadVoucherGroups: () => Promise<void>
+  loadWeeklyVoucherRequirements: () => Promise<void>
 }
 
 function getErrorMessage(error: unknown): string {
@@ -52,8 +54,8 @@ export function useVoucherSubmission(
   ): Promise<boolean> {
     const invoice = options.invoiceDetail.value
 
-    if (!invoice || invoice.qualificationStatus !== 'pending_voucher') {
-      ElMessage.warning('当前发票不处于待补凭证状态')
+    if (!invoice || !options.canSubmitVoucher.value) {
+      ElMessage.warning('当前发票没有待完成的凭证要求')
       return false
     }
 
@@ -85,12 +87,14 @@ export function useVoucherSubmission(
       )
 
       await options.loadVoucherGroups()
+      await options.loadWeeklyVoucherRequirements()
       await options.loadInvoiceDetail()
 
       ElMessage.success('凭证文件已提交，等待管理员核验')
       return true
     } catch (error) {
       await options.loadVoucherGroups()
+      await options.loadWeeklyVoucherRequirements()
       ElMessage.error(getErrorMessage(error))
       return false
     } finally {

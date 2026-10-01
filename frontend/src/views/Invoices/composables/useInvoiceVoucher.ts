@@ -6,7 +6,9 @@ import {
 } from 'vue'
 import {
   getVoucherGroups,
+  getWeeklyVoucherRequirements,
   type VoucherGroup,
+  type WeeklyVoucherRequirement,
 } from '../../../apis/voucher'
 import type { InvoiceDetail } from '../../../apis/invoices'
 
@@ -33,9 +35,27 @@ export function useInvoiceVoucher(
   const voucherGroupsLoading = ref(false)
   // 错误信息
   const voucherGroupsError = ref('')
+  const weeklyVoucherRequirements = ref<WeeklyVoucherRequirement[]>([])
+  const weeklyVoucherRequirementsLoading = ref(false)
+  const weeklyVoucherRequirementsError = ref('')
+
+  const pendingWeeklyVoucherRequirement = computed(() => {
+    return weeklyVoucherRequirements.value.find((requirement) => {
+      return requirement.status === 'pending'
+    }) || null
+  })
+
+  const isWeeklyVoucherRequired = computed(() => {
+    return pendingWeeklyVoucherRequirement.value?.currentInvoice.voucherStatus === 'pending'
+  })
+
+  const isDirectVoucherRequired = computed(() => {
+    return options.invoiceDetail.value?.qualificationStatus === 'pending_voucher'
+      && !pendingWeeklyVoucherRequirement.value
+  })
 
   const isVoucherRequired = computed(() => {
-    return options.invoiceDetail.value?.qualificationStatus === 'pending_voucher'
+    return isDirectVoucherRequired.value || isWeeklyVoucherRequired.value
   })
 
   const latestVoucherGroup = computed<VoucherGroup | null>(() => {
@@ -63,6 +83,10 @@ export function useInvoiceVoucher(
     const group = latestVoucherGroup.value
 
     if (!group) {
+      if (isWeeklyVoucherRequired.value) {
+        return '因同销售方本周累计超过 1000 元，当前发票需补齐支付凭证。'
+      }
+
       return '请准备订单截图和支付记录，两个类型均至少上传一份后提交核验。'
     }
 
@@ -103,7 +127,9 @@ export function useInvoiceVoucher(
     const status = latestVoucherGroup.value?.review_status
 
     if (!status) {
-      return '提交凭证'
+      return isWeeklyVoucherRequired.value
+        ? '补齐周累计凭证'
+        : '提交凭证'
     }
 
     if (status === 'pending_upload') {
@@ -148,10 +174,33 @@ export function useInvoiceVoucher(
     }
   }
 
+  async function loadWeeklyVoucherRequirements() {
+    const invoice = options.invoiceDetail.value
+
+    weeklyVoucherRequirements.value = []
+    weeklyVoucherRequirementsError.value = ''
+
+    if (!invoice) {
+      return
+    }
+
+    weeklyVoucherRequirementsLoading.value = true
+
+    try {
+      const result = await getWeeklyVoucherRequirements(invoice.id)
+      weeklyVoucherRequirements.value = result.requirements
+    } catch (error) {
+      weeklyVoucherRequirementsError.value = getErrorMessage(error)
+    } finally {
+      weeklyVoucherRequirementsLoading.value = false
+    }
+  }
+
   watch(
     () => options.invoiceDetail.value,
     () => {
       loadVoucherGroups()
+      loadWeeklyVoucherRequirements()
     },
     {
       immediate: true,
@@ -161,8 +210,10 @@ export function useInvoiceVoucher(
   return {
     canViewVouchers,
     isVoucherRequired,
+    isWeeklyVoucherRequired,
     latestVoucherGroup,
     loadVoucherGroups,
+    loadWeeklyVoucherRequirements,
     primaryVoucherActionLabel,
     showVoucherSection,
     voucherGroups,
@@ -171,5 +222,8 @@ export function useInvoiceVoucher(
     voucherStatusDescription,
     voucherStatusLabel,
     voucherStatusType,
+    weeklyVoucherRequirements,
+    weeklyVoucherRequirementsError,
+    weeklyVoucherRequirementsLoading,
   }
 }

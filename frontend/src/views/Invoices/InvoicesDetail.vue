@@ -78,6 +78,7 @@ const {
   isVoucherRequired,
   latestVoucherGroup,
   loadVoucherGroups,
+  loadWeeklyVoucherRequirements,
   primaryVoucherActionLabel,
   showVoucherSection,
   voucherGroups,
@@ -101,6 +102,7 @@ const {
 } = useVoucherReview({
   loadInvoiceDetail,
   loadVoucherGroups,
+  loadWeeklyVoucherRequirements,
 })
 
 const {
@@ -108,9 +110,11 @@ const {
   voucherSubmitting,
 } = useVoucherSubmission({
   invoiceDetail,
+  canSubmitVoucher: isVoucherRequired,
   latestVoucherGroup,
   loadInvoiceDetail,
   loadVoucherGroups,
+  loadWeeklyVoucherRequirements,
 })
 
 const {
@@ -120,6 +124,7 @@ const {
   invoiceDetail,
   loadInvoiceDetail,
   loadVoucherGroups,
+  loadWeeklyVoucherRequirements,
 })
 
 const {

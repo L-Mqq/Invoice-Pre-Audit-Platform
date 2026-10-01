@@ -14,6 +14,7 @@ interface UseInvoiceQualificationReviewOptions {
   invoiceDetail: Ref<InvoiceDetail | null>
   loadInvoiceDetail: () => Promise<void>
   loadVoucherGroups: () => Promise<void>
+  loadWeeklyVoucherRequirements: () => Promise<void>
 }
 
 function getErrorMessage(error: unknown): string {
@@ -51,6 +52,7 @@ export function useInvoiceQualificationReview(
       })
       await options.loadInvoiceDetail()
       await options.loadVoucherGroups()
+      await options.loadWeeklyVoucherRequirements()
 
       if (payload.action === 'abandon') {
         ElMessage.success('当前发票已放弃')
