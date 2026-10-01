@@ -8,6 +8,7 @@ import {
   type ReviewInvoiceQualificationPayload,
 } from '../../../apis/invoiceReview'
 import type { InvoiceDetail } from '../../../apis/invoices'
+import { getQualificationStatusLabel } from '../../../utils/status'
 
 interface UseInvoiceQualificationReviewOptions {
   invoiceDetail: Ref<InvoiceDetail | null>
@@ -20,7 +21,7 @@ function getErrorMessage(error: unknown): string {
     return error.message
   }
 
-  return '发票级审核失败'
+  return '发票处理失败'
 }
 
 
@@ -33,7 +34,6 @@ export function useInvoiceQualificationReview(
   async function submitQualificationReview(
     payload: Omit<ReviewInvoiceQualificationPayload, 'invoiceId'>,
   ): Promise<boolean> {
-    // 拿到发票详情
     const invoice = options.invoiceDetail.value
 
     if (!invoice) {
@@ -43,18 +43,24 @@ export function useInvoiceQualificationReview(
 
     qualificationReviewSubmitting.value = true
 
-    //调用审核接口
     try {
       const result = await reviewInvoiceQualification({
         invoiceId: invoice.id,
         action: payload.action,
         note: payload.note,
       })
-      // 刷新数据
       await options.loadInvoiceDetail()
       await options.loadVoucherGroups()
 
-      ElMessage.success(`发票级审核完成，当前状态：${result.qualificationStatus}`)
+      if (payload.action === 'abandon') {
+        ElMessage.success('当前发票已放弃')
+      } else {
+        ElMessage.success(
+          `规则审核完成，当前状态：${getQualificationStatusLabel(
+            result.qualificationStatus,
+          )}`,
+        )
+      }
       return true
     } catch (error) {
       ElMessage.error(getErrorMessage(error))

@@ -172,8 +172,19 @@ function getReviewStatusType(
         <span>确认商品品类结果后，提交整张发票进入审核队列。</span>
       </div>
       <div v-else-if="canEnterInvoiceReview">
-        <strong>管理员审核</strong>
-        <span>确认整张发票的处理结论。</span>
+        <strong>发票处理</strong>
+        <span v-if="invoice.qualificationStatus === 'pending_manual'">
+          当前发票待资料修复，暂不能再次执行规则审核；如不再处理可放弃发票。
+        </span>
+        <span v-else-if="invoice.qualificationStatus === 'pending_voucher'">
+          请先完成支付凭证审核；如不再处理可放弃发票。
+        </span>
+        <span v-else-if="invoice.qualificationStatus === 'rejected'">
+          当前发票未通过规则审核；如不再处理可放弃发票。
+        </span>
+        <span v-else>
+          可执行规则审核，或放弃当前发票。
+        </span>
       </div>
       <div v-else-if="isCategoryEditable">
         <strong>待完成商品确认</strong>
@@ -196,7 +207,7 @@ function getReviewStatusType(
         type="primary"
         @click="emit('enterReview')"
       >
-        进入审核
+        处理发票
       </el-button>
     </div>
   </el-card>

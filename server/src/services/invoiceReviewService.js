@@ -8,15 +8,14 @@ const {
 
 const ALLOWED_RESULTS = new Set(['可以', '存疑', '不可以'])
 const QUALIFICATION_ACTIONS = new Set([
-  'approve',
-  'request_voucher',
-  'mark_manual',
-  'reject',
-  'cancel',
+  'execute_rules',
+  'abandon',
 ])
-const NOTE_REQUIRED_ACTIONS = new Set([
-  'reject',
-  'cancel',
+const ABANDONABLE_QUALIFICATION_STATUSES = new Set([
+  'pending',
+  'pending_voucher',
+  'pending_manual',
+  'rejected',
 ])
 
 // 创建http错误码
@@ -48,8 +47,8 @@ function validateNote(note, action) {
     throw createHttpError(400, 'note 不能超过 2000 个字符')
   }
 
-  if (NOTE_REQUIRED_ACTIONS.has(action) && !normalizedNote) {
-    throw createHttpError(400, '当前操作必须填写审核说明')
+  if (action === 'abandon' && !normalizedNote) {
+    throw createHttpError(400, '放弃当前发票必须填写放弃原因')
   }
 
   return normalizedNote || null
@@ -135,33 +134,7 @@ function sumInvoiceAmountsInCents(invoices) {
     0,
   )
 }
-// 处理非 approve 的直接操作（管理员手动流转）
-function getDirectActionDecision(action, note) {
-  const decisions = {
-    request_voucher: {
-      qualificationStatus: 'pending_voucher',
-      qualificationReason: note || '管理员要求补充支付凭证',
-    },
-    mark_manual: {
-      qualificationStatus: 'pending_manual',
-      qualificationReason: note || '管理员标记为待人工处理',
-    },
-    reject: {
-      qualificationStatus: 'rejected',
-      qualificationReason: note,
-    },
-    cancel: {
-      qualificationStatus: 'cancelled',
-      qualificationReason: note,
-    },
-  }
-
-  return decisions[action] || null
-}
-
-
-
-// approve 操作的完整业务决策链，返回最终状态和累计金额。
+// 执行规则审核的完整业务决策链，返回最终状态和累计金额。
 async function resolveApprovalDecision({
   connection,
   invoice,
@@ -433,7 +406,7 @@ async function submitInvoiceForReview({
   }
 }
 
-// 进入审核更改资质审核的最终结果qualification_status
+// 管理员只能执行规则审核，或放弃当前发票。
 async function reviewInvoiceQualification({
   invoiceId,
   action,
@@ -448,6 +421,11 @@ async function reviewInvoiceQualification({
   }
 
   const normalizedNote = validateNote(note, action)
+
+  if (action === 'execute_rules' && normalizedNote) {
+    throw createHttpError(400, '执行规则审核不接受审核说明')
+  }
+
   const connection = await pool.getConnection()
 
   try {
@@ -467,11 +445,31 @@ async function reviewInvoiceQualification({
     }
 
     if (invoice.qualification_status === 'cancelled') {
-      throw createHttpError(409, '已取消的发票不能再次审核')
+      throw createHttpError(409, '已取消的发票不能执行规则审核或再次放弃')
     }
 
-    if (invoice.qualification_status === 'rejected' && action === 'approve') {
-      throw createHttpError(409, '审核不通过的发票不能直接审核通过，请重新上传或人工处理')
+    if (
+      action === 'execute_rules'
+      && invoice.qualification_status !== 'pending'
+    ) {
+      throw createHttpError(409, '当前发票不是待审核状态，不能执行规则审核')
+    }
+
+    if (
+      action === 'abandon'
+      && !ABANDONABLE_QUALIFICATION_STATUSES.has(invoice.qualification_status)
+    ) {
+      throw createHttpError(409, '当前发票状态不能放弃')
+    }
+
+    if (
+      action === 'abandon'
+      && (
+        invoice.finance_status !== 'not_submitted'
+        || invoice.reimbursement_status !== 'not_completed'
+      )
+    ) {
+      throw createHttpError(409, '已进入财务或报销流程的发票不能放弃')
     }
 
     const beforeData = {
@@ -482,9 +480,9 @@ async function reviewInvoiceQualification({
       submittedAt: invoice.submitted_at,
       manualNote: invoice.manual_note,
     }
-    let decision = getDirectActionDecision(action, normalizedNote)
+    let decision
 
-    if (action === 'approve') {
+    if (action === 'execute_rules') {
       const items = await invoiceReviewRepository.findItemsForQualificationReview({
         connection,
         invoiceId: normalizedInvoiceId,
@@ -495,16 +493,24 @@ async function reviewInvoiceQualification({
         invoice,
         items,
       })
+    } else {
+      decision = {
+        qualificationStatus: 'cancelled',
+        qualificationReason: normalizedNote,
+        cumulativeAmount: invoice.cumulative_amount,
+        cumulativeWeekStart: invoice.cumulative_week_start,
+        submittedAt: invoice.submitted_at,
+      }
     }
 
-    const cumulativeAmount = action === 'approve'
+    const cumulativeAmount = action === 'execute_rules'
       ? decision.cumulativeAmount
       : invoice.cumulative_amount
-    const cumulativeWeekStart = action === 'approve'
+    const cumulativeWeekStart = action === 'execute_rules'
       ? decision.cumulativeWeekStart
       : invoice.cumulative_week_start
-    const submittedAt = decision.submittedAt || null
-    const manualNote = normalizedNote || invoice.manual_note
+    const submittedAt = decision.submittedAt
+    const manualNote = invoice.manual_note
 
     await invoiceReviewRepository.updateInvoiceQualificationReview({
       connection,
@@ -533,6 +539,9 @@ async function reviewInvoiceQualification({
       invoiceId: normalizedInvoiceId,
       beforeData,
       afterData,
+      operationType: action === 'execute_rules'
+        ? 'execute_qualification_rules'
+        : 'abandon_invoice',
     })
 
     await connection.commit()

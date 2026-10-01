@@ -4,7 +4,10 @@ import {
   ref,
   watch,
 } from 'vue'
-import { ElMessage } from 'element-plus'
+import {
+  ElMessage,
+  ElMessageBox,
+} from 'element-plus'
 import type { InvoiceDetail } from '../../../apis/invoices'
 import type {
   VoucherGroup,
@@ -42,8 +45,12 @@ const emit = defineEmits<{
   }]
 }>()
 
-const qualificationAction = ref<InvoiceQualificationAction>('approve')
+const qualificationAction = ref<InvoiceQualificationAction>('execute_rules')
 const qualificationNote = ref('')
+
+const canExecuteRules = computed(() => {
+  return props.invoice?.qualificationStatus === 'pending'
+})
 
 const hasRejectedCategoryItem = computed(() => {
   return props.invoice?.items.some(
@@ -76,7 +83,7 @@ const approvedVoucherGroups = computed(() => {
 })
 
 const requiresQualificationNote = computed(() => {
-  return qualificationAction.value !== 'approve'
+  return qualificationAction.value === 'abandon'
 })
 
 function formatAmount(amount: number | string | null | undefined): string {
@@ -141,12 +148,28 @@ function closeDialog() {
   visible.value = false
 }
 
-function submitReview() {
+async function submitReview() {
   const note = qualificationNote.value.trim()
 
   if (requiresQualificationNote.value && !note) {
-    ElMessage.warning('当前审核操作必须填写审核说明')
+    ElMessage.warning('放弃当前发票必须填写放弃原因')
     return
+  }
+
+  if (qualificationAction.value === 'abandon') {
+    try {
+      await ElMessageBox.confirm(
+        '放弃后，发票不会进入财务和报销流程，但原始文件、凭证及操作记录仍会保留。',
+        '确认放弃当前发票',
+        {
+          confirmButtonText: '确认放弃',
+          cancelButtonText: '继续处理',
+          type: 'warning',
+        },
+      )
+    } catch {
+      return
+    }
   }
 
   emit('submitReview', {
@@ -159,7 +182,9 @@ watch(
   () => visible.value,
   (isVisible) => {
     if (isVisible) {
-      qualificationAction.value = 'approve'
+      qualificationAction.value = canExecuteRules.value
+        ? 'execute_rules'
+        : 'abandon'
       qualificationNote.value = ''
     }
   },
@@ -181,7 +206,7 @@ watch(
       @wheel.stop
     >
       <el-alert
-        title="选择“审核通过”后，系统将重新执行商品品类、单价、自然周累计和凭证规则。"
+        title="执行规则审核时，系统将重新校验商品品类、单价、自然周累计和支付凭证。"
         type="info"
         :closable="false"
         show-icon
@@ -444,8 +469,8 @@ watch(
 
       <section class="review-section">
         <div class="section-heading">
-          <h3>审核结论</h3>
-          <span>提交后将更新发票资质状态</span>
+          <h3>处理操作</h3>
+          <span>规则结论由系统计算，管理员不能手工指定</span>
         </div>
 
         <el-radio-group
@@ -453,33 +478,26 @@ watch(
           class="qualification-actions"
           :disabled="submitting"
         >
-          <el-radio value="approve">
-            审核通过
+          <el-radio
+            v-if="canExecuteRules"
+            value="execute_rules"
+          >
+            执行规则审核
           </el-radio>
-          <el-radio value="request_voucher">
-            待补凭证
-          </el-radio>
-          <el-radio value="mark_manual">
-            待人工处理
-          </el-radio>
-          <el-radio value="reject">
-            审核不通过
-          </el-radio>
-          <el-radio value="cancel">
-            取消发票
+          <el-radio value="abandon">
+            放弃当前发票
           </el-radio>
         </el-radio-group>
 
         <el-input
+          v-if="qualificationAction === 'abandon'"
           class="review-note"
           v-model="qualificationNote"
           type="textarea"
           :rows="3"
           maxlength="2000"
           show-word-limit
-          :placeholder="requiresQualificationNote
-            ? '请填写审核说明，当前操作必填'
-            : '可选：填写审核说明'"
+          placeholder="请填写放弃原因，例如重复上传、业务不再报销或资料无法补齐"
           :disabled="submitting"
         />
       </section>
@@ -490,12 +508,12 @@ watch(
         取消
       </el-button>
       <el-button
-        type="primary"
+        :type="qualificationAction === 'abandon' ? 'danger' : 'primary'"
         :loading="submitting"
         :disabled="submitting"
         @click="submitReview"
       >
-        提交审核结论
+        {{ qualificationAction === 'abandon' ? '放弃当前发票' : '执行规则审核' }}
       </el-button>
     </template>
   </el-dialog>

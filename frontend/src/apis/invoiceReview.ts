@@ -26,11 +26,8 @@ export interface SubmitInvoiceForReviewResponse {
 }
 
 export type InvoiceQualificationAction =
-  | 'approve'
-  | 'request_voucher'
-  | 'mark_manual'
-  | 'reject'
-  | 'cancel'
+  | 'execute_rules'
+  | 'abandon'
 
 export interface ReviewInvoiceQualificationPayload {
   invoiceId: number

@@ -13,6 +13,13 @@ interface UseInvoiceReviewSubmissionOptions {
   loadInvoiceDetail: () => Promise<void>
 }
 
+const REVIEWABLE_QUALIFICATION_STATUSES = new Set([
+  'pending',
+  'pending_voucher',
+  'pending_manual',
+  'rejected',
+])
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message
@@ -55,7 +62,9 @@ export function useInvoiceReviewSubmission(
     }
 
     return Boolean(options.invoiceDetail.value.submittedAt)
-      && options.invoiceDetail.value.qualificationStatus === 'pending'
+      && REVIEWABLE_QUALIFICATION_STATUSES.has(
+        options.invoiceDetail.value.qualificationStatus,
+      )
   })
 
   async function submitInvoiceReview() {

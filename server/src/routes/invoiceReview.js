@@ -16,7 +16,7 @@ router.get(
   '/invoices/:invoiceId/qualification-preview',
   controller.getInvoiceQualificationPreview,
 )
-// 进入审核更改资质审核的最终结果qualification_status
+// 执行规则审核或放弃当前发票。
 router.patch(
   '/invoices/:invoiceId/qualification',
   controller.reviewInvoiceQualification,

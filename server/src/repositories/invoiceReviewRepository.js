@@ -143,6 +143,8 @@ async function findInvoiceForQualificationReview({
        qualification_reason,
        cumulative_amount,
        cumulative_week_start,
+       finance_status,
+       reimbursement_status,
        manual_note
      FROM invoices
      WHERE id = ?
@@ -168,6 +170,8 @@ async function findInvoiceForQualificationPreview({
        qualification_reason,
        cumulative_amount,
        cumulative_week_start,
+       finance_status,
+       reimbursement_status,
        manual_note
      FROM invoices
      WHERE id = ?`,
