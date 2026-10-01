@@ -11,6 +11,7 @@ import InvoicePreviewCard from './components/InvoicePreviewCard.vue'
 import InvoiceQualificationReviewDialog from './components/InvoiceQualificationReviewDialog.vue'
 import InvoiceReviewCard from './components/InvoiceReviewCard.vue'
 import InvoiceStatusStrip from './components/InvoiceStatusStrip.vue'
+import InvoiceVoucherDialog from './components/InvoiceVoucherDialog.vue'
 import { useInvoiceCategoryReview } from './composables/useInvoiceCategoryReview'
 import { useInvoiceDetail } from './composables/useInvoiceDetail'
 import { useInvoiceFileActions } from './composables/useInvoiceFileActions'
@@ -19,6 +20,7 @@ import { useInvoiceVoucher } from './composables/useInvoiceVoucher'
 
 const router = useRouter()
 const qualificationReviewVisible = ref(false)
+const voucherDialogVisible = ref(false)
 
 const {
   getRouteInvoiceId,
@@ -65,6 +67,7 @@ const {
 const {
   canViewVouchers,
   isVoucherRequired,
+  latestVoucherGroup,
   primaryVoucherActionLabel,
   voucherGroupsError,
   voucherGroupsLoading,
@@ -110,11 +113,15 @@ function openQualificationReview() {
 }
 
 function handleSubmitVoucher() {
-  ElMessage.info('凭证提交弹窗待接入')
+  voucherDialogVisible.value = true
 }
 
 function handleViewVoucher() {
   ElMessage.info('凭证查看弹窗待接入')
+}
+
+function handleVoucherDialogSubmit() {
+  ElMessage.info('已完成本地文件校验，凭证提交接口待接入')
 }
 
 </script>
@@ -228,6 +235,13 @@ function handleViewVoucher() {
     <InvoiceQualificationReviewDialog
       v-model:visible="qualificationReviewVisible"
       :invoice="invoiceDetail"
+    />
+
+    <InvoiceVoucherDialog
+      v-model:visible="voucherDialogVisible"
+      :action-label="primaryVoucherActionLabel"
+      :latest-voucher-group="latestVoucherGroup"
+      @submit="handleVoucherDialogSubmit"
     />
 
     <el-dialog
