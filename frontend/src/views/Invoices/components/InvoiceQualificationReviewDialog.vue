@@ -10,8 +10,14 @@ import type {
   VoucherGroup,
   VoucherType,
 } from '../../../apis/voucher'
-import type { InvoiceQualificationAction } from '../../../apis/invoiceReview'
-import { formatChinaDate } from '../../../utils/date'
+import type {
+  InvoiceQualificationAction,
+  InvoiceQualificationPreview,
+} from '../../../apis/invoiceReview'
+import {
+  formatChinaDate,
+  formatChinaDateTime,
+} from '../../../utils/date'
 import { getQualificationStatusLabel } from '../../../utils/status'
 
 const visible = defineModel<boolean>('visible', {
@@ -22,6 +28,9 @@ const props = defineProps<{
   invoice: InvoiceDetail | null
   voucherGroups: VoucherGroup[]
   voucherFilePreviewing: boolean
+  qualificationPreview: InvoiceQualificationPreview | null
+  qualificationPreviewError: string
+  qualificationPreviewLoading: boolean
   submitting: boolean
 }>()
 
@@ -55,7 +64,8 @@ const hasAssetItem = computed(() => {
 })
 
 const needsVoucher = computed(() => {
-  return hasLowValueItem.value
+  return props.qualificationPreview?.requiresVoucher
+    || hasLowValueItem.value
     || Number(props.invoice?.cumulativeAmount || 0) > 1000
 })
 
@@ -71,6 +81,37 @@ const requiresQualificationNote = computed(() => {
 
 function formatAmount(amount: number | string | null | undefined): string {
   return `¥${Number(amount || 0).toFixed(2)}`
+}
+
+function formatPreviewAmount(
+  amount: number | string | null,
+): string {
+  if (amount === null) {
+    return '暂无法计算'
+  }
+
+  return formatAmount(amount)
+}
+
+function getQualificationStatusType(
+  status: string,
+): 'success' | 'warning' | 'danger' | 'info' {
+  if (status === 'approved') {
+    return 'success'
+  }
+
+  if (status === 'rejected') {
+    return 'danger'
+  }
+
+  if (
+    status === 'pending_manual'
+    || status === 'pending_voucher'
+  ) {
+    return 'warning'
+  }
+
+  return 'info'
 }
 
 function getCategoryResult(result: string | null): string {
@@ -154,7 +195,7 @@ watch(
           </el-tag>
         </div>
 
-        <div class="summary-grid">
+        <div class="summary-grid invoice-summary-grid">
           <div>
             <span>发票号码</span>
             <strong>{{ invoice.invoiceNumber || '未识别' }}</strong>
@@ -169,17 +210,77 @@ watch(
           </div>
           <div>
             <span>提交审核时间</span>
-            <strong>{{ invoice.submittedAt || '尚未提交' }}</strong>
-          </div>
-          <div>
-            <span>自然周累计</span>
-            <strong>{{ formatAmount(invoice.cumulativeAmount) }}</strong>
-          </div>
-          <div>
-            <span>累计所属周</span>
-            <strong>{{ formatChinaDate(invoice.cumulativeWeekStart) || '尚未计算' }}</strong>
+            <strong>
+              {{ formatChinaDateTime(invoice.submittedAt) || '尚未提交' }}
+            </strong>
           </div>
         </div>
+      </section>
+
+      <section class="review-section cumulative-preview-section">
+        <div class="section-heading">
+          <div>
+            <h3>自然周累计预估</h3>
+            <span>仅供审核决策参考，提交审核结论时系统将重新计算。</span>
+          </div>
+        </div>
+
+        <el-skeleton
+          v-if="qualificationPreviewLoading"
+          :rows="3"
+          animated
+        />
+
+        <el-alert
+          v-else-if="qualificationPreviewError"
+          :title="qualificationPreviewError"
+          type="warning"
+          :closable="false"
+          show-icon
+        />
+
+        <template v-else-if="qualificationPreview">
+          <div class="summary-grid cumulative-preview-grid">
+            <div>
+              <span>此前有效累计</span>
+              <strong>
+                {{ formatPreviewAmount(qualificationPreview.priorCumulativeAmount) }}
+              </strong>
+            </div>
+            <div>
+              <span>当前发票金额</span>
+              <strong class="amount">
+                {{ formatPreviewAmount(qualificationPreview.currentInvoiceAmount) }}
+              </strong>
+            </div>
+            <div>
+              <span>预计累计</span>
+              <strong>
+                {{ formatPreviewAmount(qualificationPreview.projectedCumulativeAmount) }}
+              </strong>
+            </div>
+            <div>
+              <span>累计所属周</span>
+              <strong>
+                {{ formatChinaDate(qualificationPreview.cumulativeWeekStart) || '暂无法计算' }}
+              </strong>
+            </div>
+          </div>
+
+          <div class="preview-conclusion">
+            <span>预计结论</span>
+            <el-tag
+              :type="getQualificationStatusType(
+                qualificationPreview.projectedQualificationStatus,
+              )"
+            >
+              {{ getQualificationStatusLabel(
+                qualificationPreview.projectedQualificationStatus,
+              ) }}
+            </el-tag>
+            <strong>{{ qualificationPreview.projectedQualificationReason }}</strong>
+          </div>
+        </template>
       </section>
 
       <section class="review-section">
@@ -451,6 +552,10 @@ watch(
   gap: 16px 24px;
 }
 
+.invoice-summary-grid {
+  grid-template-columns: repeat(2, 1fr);
+}
+
 .summary-grid div {
   display: flex;
   flex-direction: column;
@@ -465,6 +570,51 @@ watch(
 .summary-grid strong {
   color: #334155;
   font-size: 14px;
+}
+
+.cumulative-preview-section {
+  border-color: #bfdbfe;
+  background: #f8fbff;
+}
+
+.cumulative-preview-section .section-heading {
+  align-items: flex-start;
+}
+
+.cumulative-preview-section .section-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.cumulative-preview-section .section-heading span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.cumulative-preview-grid {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.preview-conclusion {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #dbeafe;
+}
+
+.preview-conclusion > span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.preview-conclusion strong {
+  color: #334155;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .amount {
@@ -557,6 +707,10 @@ watch(
 
 @media (max-width: 720px) {
   .summary-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .cumulative-preview-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }

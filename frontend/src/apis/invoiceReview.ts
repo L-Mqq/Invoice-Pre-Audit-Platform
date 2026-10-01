@@ -49,6 +49,18 @@ export interface ReviewInvoiceQualificationResponse {
   manualNote: string | null
 }
 
+export interface InvoiceQualificationPreview {
+  invoiceId: number
+  priorCumulativeAmount: number | string | null
+  currentInvoiceAmount: number | string
+  projectedCumulativeAmount: number | string | null
+  cumulativeWeekStart: string | null
+  projectedQualificationStatus: string
+  projectedQualificationReason: string
+  requiresVoucher: boolean
+  calculable: boolean
+}
+
 // 更新人工审核商品品类的结果
 export async function reviewItemCategory(
   payload: ReviewItemCategoryPayload,
@@ -92,6 +104,28 @@ export async function submitInvoiceForReview(
     if (axios.isAxiosError<{ message?: string }>(error)) {
       throw new Error(
         error.response?.data?.message || '提交审核失败',
+      )
+    }
+
+    throw error
+  }
+}
+
+// 获取周累计信息
+export async function getInvoiceQualificationPreview(
+  invoiceId: number,
+): Promise<InvoiceQualificationPreview> {
+  try {
+    const response = await http.get<{
+      success: boolean
+      data: InvoiceQualificationPreview
+    }>(`/invoice-review/invoices/${invoiceId}/qualification-preview`)
+
+    return response.data.data
+  } catch (error: unknown) {
+    if (axios.isAxiosError<{ message?: string }>(error)) {
+      throw new Error(
+        error.response?.data?.message || '获取规则预览失败',
       )
     }
 

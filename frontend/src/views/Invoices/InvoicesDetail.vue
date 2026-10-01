@@ -18,6 +18,7 @@ import InvoiceVoucherReviewDialog from './components/InvoiceVoucherReviewDialog.
 import { useInvoiceCategoryReview } from './composables/useInvoiceCategoryReview'
 import { useInvoiceDetail } from './composables/useInvoiceDetail'
 import { useInvoiceFileActions } from './composables/useInvoiceFileActions'
+import { useInvoiceQualificationPreview } from './composables/useInvoiceQualificationPreview'
 import { useInvoiceQualificationReview } from './composables/useInvoiceQualificationReview'
 import { useInvoiceReviewSubmission } from './composables/useInvoiceReviewSubmission'
 import { useInvoiceVoucher } from './composables/useInvoiceVoucher'
@@ -121,6 +122,15 @@ const {
   loadVoucherGroups,
 })
 
+const {
+  qualificationPreview,
+  qualificationPreviewError,
+  qualificationPreviewLoading,
+  loadQualificationPreview,
+} = useInvoiceQualificationPreview({
+  invoiceDetail,
+})
+
 function formatAmount(amount: number | string | null): string {
   return `¥${Number(amount || 0).toFixed(2)}`
 }
@@ -151,8 +161,10 @@ function goBack() {
   })
 }
 
-function openQualificationReview() {
+async function openQualificationReview() {
   qualificationReviewVisible.value = true
+
+  await loadQualificationPreview()
 }
 
 function handleSubmitVoucher() {
@@ -300,6 +312,9 @@ async function handleQualificationReview(
       :invoice="invoiceDetail"
       :voucher-groups="voucherGroups"
       :voucher-file-previewing="voucherFilePreviewing"
+      :qualification-preview="qualificationPreview"
+      :qualification-preview-error="qualificationPreviewError"
+      :qualification-preview-loading="qualificationPreviewLoading"
       :submitting="qualificationReviewSubmitting"
       @preview-voucher-file="previewVoucherFileById"
       @submit-review="handleQualificationReview"
