@@ -5,6 +5,7 @@ import {
 import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import type { InvoiceDetailItem } from '../../apis/invoices'
+import type { InvoiceQualificationAction } from '../../apis/invoiceReview'
 import type { VoucherSubmissionFiles } from '../../apis/voucher'
 import InvoiceBasicInfo from './components/InvoiceBasicInfo.vue'
 import InvoiceItemsTable from './components/InvoiceItemsTable.vue'
@@ -17,6 +18,7 @@ import InvoiceVoucherReviewDialog from './components/InvoiceVoucherReviewDialog.
 import { useInvoiceCategoryReview } from './composables/useInvoiceCategoryReview'
 import { useInvoiceDetail } from './composables/useInvoiceDetail'
 import { useInvoiceFileActions } from './composables/useInvoiceFileActions'
+import { useInvoiceQualificationReview } from './composables/useInvoiceQualificationReview'
 import { useInvoiceReviewSubmission } from './composables/useInvoiceReviewSubmission'
 import { useInvoiceVoucher } from './composables/useInvoiceVoucher'
 import { useVoucherFileActions } from './composables/useVoucherFileActions'
@@ -110,6 +112,15 @@ const {
   loadVoucherGroups,
 })
 
+const {
+  qualificationReviewSubmitting,
+  submitQualificationReview,
+} = useInvoiceQualificationReview({
+  invoiceDetail,
+  loadInvoiceDetail,
+  loadVoucherGroups,
+})
+
 function formatAmount(amount: number | string | null): string {
   return `¥${Number(amount || 0).toFixed(2)}`
 }
@@ -159,6 +170,19 @@ async function handleVoucherDialogSubmit(
 
   if (isSubmitted) {
     voucherDialogVisible.value = false
+  }
+}
+
+async function handleQualificationReview(
+  payload: {
+    action: InvoiceQualificationAction
+    note: string
+  },
+) {
+  const isSubmitted = await submitQualificationReview(payload)
+
+  if (isSubmitted) {
+    qualificationReviewVisible.value = false
   }
 }
 
@@ -274,6 +298,11 @@ async function handleVoucherDialogSubmit(
     <InvoiceQualificationReviewDialog
       v-model:visible="qualificationReviewVisible"
       :invoice="invoiceDetail"
+      :voucher-groups="voucherGroups"
+      :voucher-file-previewing="voucherFilePreviewing"
+      :submitting="qualificationReviewSubmitting"
+      @preview-voucher-file="previewVoucherFileById"
+      @submit-review="handleQualificationReview"
     />
 
     <InvoiceVoucherDialog

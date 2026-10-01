@@ -25,6 +25,30 @@ export interface SubmitInvoiceForReviewResponse {
   submittedAt: string
 }
 
+export type InvoiceQualificationAction =
+  | 'approve'
+  | 'request_voucher'
+  | 'mark_manual'
+  | 'reject'
+  | 'cancel'
+
+export interface ReviewInvoiceQualificationPayload {
+  invoiceId: number
+  action: InvoiceQualificationAction
+  note: string
+}
+
+export interface ReviewInvoiceQualificationResponse {
+  id: number
+  action: InvoiceQualificationAction
+  qualificationStatus: string
+  qualificationReason: string
+  cumulativeAmount: number | string | null
+  cumulativeWeekStart: string | null
+  submittedAt: string | null
+  manualNote: string | null
+}
+
 // 更新人工审核商品品类的结果
 export async function reviewItemCategory(
   payload: ReviewItemCategoryPayload,
@@ -68,6 +92,34 @@ export async function submitInvoiceForReview(
     if (axios.isAxiosError<{ message?: string }>(error)) {
       throw new Error(
         error.response?.data?.message || '提交审核失败',
+      )
+    }
+
+    throw error
+  }
+}
+
+// 发票级审核，修改发票的结果
+export async function reviewInvoiceQualification(
+  payload: ReviewInvoiceQualificationPayload,
+): Promise<ReviewInvoiceQualificationResponse> {
+  try {
+    const response = await http.patch<{
+      success: boolean
+      data: ReviewInvoiceQualificationResponse
+    }>(
+      `/invoice-review/invoices/${payload.invoiceId}/qualification`,
+      {
+        action: payload.action,
+        note: payload.note,
+      },
+    )
+
+    return response.data.data
+  } catch (error: unknown) {
+    if (axios.isAxiosError<{ message?: string }>(error)) {
+      throw new Error(
+        error.response?.data?.message || '发票级审核失败',
       )
     }
 

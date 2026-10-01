@@ -1,6 +1,16 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import {
+  computed,
+  ref,
+  watch,
+} from 'vue'
+import { ElMessage } from 'element-plus'
 import type { InvoiceDetail } from '../../../apis/invoices'
+import type {
+  VoucherGroup,
+  VoucherType,
+} from '../../../apis/voucher'
+import type { InvoiceQualificationAction } from '../../../apis/invoiceReview'
 import { getQualificationStatusLabel } from '../../../utils/status'
 
 const visible = defineModel<boolean>('visible', {
@@ -9,7 +19,21 @@ const visible = defineModel<boolean>('visible', {
 
 const props = defineProps<{
   invoice: InvoiceDetail | null
+  voucherGroups: VoucherGroup[]
+  voucherFilePreviewing: boolean
+  submitting: boolean
 }>()
+
+const emit = defineEmits<{
+  previewVoucherFile: [voucherId: number]
+  submitReview: [payload: {
+    action: InvoiceQualificationAction
+    note: string
+  }]
+}>()
+
+const qualificationAction = ref<InvoiceQualificationAction>('approve')
+const qualificationNote = ref('')
 
 const hasRejectedCategoryItem = computed(() => {
   return props.invoice?.items.some(
@@ -34,6 +58,16 @@ const needsVoucher = computed(() => {
     || Number(props.invoice?.cumulativeAmount || 0) > 1000
 })
 
+const approvedVoucherGroups = computed(() => {
+  return props.voucherGroups.filter((group) => {
+    return group.review_status === 'approved'
+  })
+})
+
+const requiresQualificationNote = computed(() => {
+  return qualificationAction.value !== 'approve'
+})
+
 function formatAmount(amount: number | string | null | undefined): string {
   return `¥${Number(amount || 0).toFixed(2)}`
 }
@@ -52,9 +86,42 @@ function getPriceTypeLabel(priceType: string | null): string {
   return priceType ? labels[priceType] || '待判断' : '待判断'
 }
 
+function getVoucherFiles(
+  group: VoucherGroup,
+  voucherType: VoucherType,
+) {
+  return group.files.filter((file) => {
+    return file.voucher_type === voucherType
+  })
+}
+
 function closeDialog() {
   visible.value = false
 }
+
+function submitReview() {
+  const note = qualificationNote.value.trim()
+
+  if (requiresQualificationNote.value && !note) {
+    ElMessage.warning('当前审核操作必须填写审核说明')
+    return
+  }
+
+  emit('submitReview', {
+    action: qualificationAction.value,
+    note,
+  })
+}
+
+watch(
+  () => visible.value,
+  (isVisible) => {
+    if (isVisible) {
+      qualificationAction.value = 'approve'
+      qualificationNote.value = ''
+    }
+  },
+)
 </script>
 
 <template>
@@ -72,7 +139,7 @@ function closeDialog() {
       @wheel.stop
     >
       <el-alert
-        title="当前为审核界面静态展示，尚未接入发票级审核提交接口。"
+        title="选择“审核通过”后，系统将重新执行商品品类、单价、自然周累计和凭证规则。"
         type="info"
         :closable="false"
         show-icon
@@ -187,33 +254,103 @@ function closeDialog() {
         <div class="section-heading">
           <h3>支付凭证</h3>
           <el-tag
-            :type="needsVoucher ? 'warning' : 'info'"
+            :type="approvedVoucherGroups.length > 0 ? 'success' : needsVoucher ? 'warning' : 'info'"
             effect="plain"
           >
-            {{ needsVoucher ? '需要核验凭证' : '当前规则无需凭证' }}
+            {{ approvedVoucherGroups.length > 0
+              ? '已核验通过'
+              : needsVoucher
+                ? '需要核验凭证'
+                : '当前规则无需凭证' }}
           </el-tag>
         </div>
 
-        <div class="voucher-placeholder">
-          <div class="voucher-icon">凭</div>
-          <div>
-            <strong>支付凭证组待接入</strong>
-            <p>
-              {{ needsVoucher
-                ? '本发票需要展示订单截图、支付记录及凭证组人工核验状态。'
-                : '支付凭证模块接入后，可在此查看已关联的凭证组。' }}
+        <div
+          v-if="approvedVoucherGroups.length > 0"
+          class="approved-voucher-groups"
+        >
+          <article
+            v-for="group in approvedVoucherGroups"
+            :key="group.id"
+            class="approved-voucher-group"
+          >
+            <div class="voucher-group-heading">
+              <div>
+                <strong>{{ group.group_name || `凭证组 #${group.id}` }}</strong>
+                <span>审核通过时间：{{ group.reviewed_at || '未记录' }}</span>
+              </div>
+              <el-tag type="success" effect="plain">
+                已核验通过
+              </el-tag>
+            </div>
+
+            <p
+              v-if="group.review_note"
+              class="voucher-review-note"
+            >
+              审核说明：{{ group.review_note }}
             </p>
-          </div>
+
+            <div class="voucher-file-grid">
+              <div>
+                <span>订单截图</span>
+                <el-button
+                  v-for="file in getVoucherFiles(group, 'order_screenshot')"
+                  :key="file.id"
+                  link
+                  type="primary"
+                  :loading="voucherFilePreviewing"
+                  @click="emit('previewVoucherFile', file.id)"
+                >
+                  {{ file.original_name }}
+                </el-button>
+              </div>
+
+              <div>
+                <span>支付记录</span>
+                <el-button
+                  v-for="file in getVoucherFiles(group, 'payment_record')"
+                  :key="file.id"
+                  link
+                  type="primary"
+                  :loading="voucherFilePreviewing"
+                  @click="emit('previewVoucherFile', file.id)"
+                >
+                  {{ file.original_name }}
+                </el-button>
+              </div>
+            </div>
+          </article>
         </div>
+
+        <el-alert
+          v-else-if="needsVoucher"
+          title="当前发票按规则需要支付凭证，但尚无已核验通过的凭证组。"
+          type="warning"
+          :closable="false"
+          show-icon
+        />
+
+        <el-alert
+          v-else
+          title="当前规则无需支付凭证。"
+          type="info"
+          :closable="false"
+          show-icon
+        />
       </section>
 
       <section class="review-section">
         <div class="section-heading">
           <h3>审核结论</h3>
-          <span>静态布局</span>
+          <span>提交后将更新发票资质状态</span>
         </div>
 
-        <el-radio-group model-value="approve" disabled>
+        <el-radio-group
+          v-model="qualificationAction"
+          class="qualification-actions"
+          :disabled="submitting"
+        >
           <el-radio value="approve">
             审核通过
           </el-radio>
@@ -233,17 +370,30 @@ function closeDialog() {
 
         <el-input
           class="review-note"
+          v-model="qualificationNote"
           type="textarea"
           :rows="3"
-          placeholder="审核说明将在接入提交接口后启用"
-          disabled
+          maxlength="2000"
+          show-word-limit
+          :placeholder="requiresQualificationNote
+            ? '请填写审核说明，当前操作必填'
+            : '可选：填写审核说明'"
+          :disabled="submitting"
         />
       </section>
     </div>
 
     <template #footer>
       <el-button @click="closeDialog">
-        关闭
+        取消
+      </el-button>
+      <el-button
+        type="primary"
+        :loading="submitting"
+        :disabled="submitting"
+        @click="submitReview"
+      >
+        提交审核结论
       </el-button>
     </template>
   </el-dialog>
@@ -328,42 +478,80 @@ function closeDialog() {
   margin-bottom: 14px;
 }
 
-.voucher-placeholder {
+.approved-voucher-groups {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 14px;
+}
+
+.approved-voucher-group {
   padding: 16px;
-  border: 1px dashed #bfdbfe;
+  border: 1px solid #bbf7d0;
   border-radius: 10px;
-  background: #f8fbff;
+  background: #f0fdf4;
 }
 
-.voucher-icon {
-  width: 40px;
-  height: 40px;
-  flex: 0 0 auto;
-  border-radius: 50%;
-  background: #dbeafe;
-  color: #2563eb;
-  font-weight: 700;
-  line-height: 40px;
-  text-align: center;
+.voucher-group-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 
-.voucher-placeholder strong {
-  color: #334155;
+.voucher-group-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.voucher-group-heading strong {
+  color: #166534;
   font-size: 14px;
 }
 
-.voucher-placeholder p {
-  margin: 6px 0 0;
+.voucher-group-heading span {
   color: #64748b;
   font-size: 12px;
+}
+
+.voucher-review-note {
+  margin: 12px 0 0;
+  color: #475569;
+  font-size: 13px;
   line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.voucher-file-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.voucher-file-grid > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.voucher-file-grid span {
+  color: #64748b;
+  font-size: 12px;
 }
 
 .review-note {
   margin-top: 16px;
+}
+
+.qualification-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
 }
 
 @media (max-width: 720px) {
@@ -374,6 +562,10 @@ function closeDialog() {
 
 @media (max-width: 480px) {
   .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .voucher-file-grid {
     grid-template-columns: 1fr;
   }
 }
