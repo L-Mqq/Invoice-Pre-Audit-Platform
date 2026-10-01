@@ -289,6 +289,51 @@ async function findApprovedInvoicesForWeekPreview({
   return rows
 }
 
+// 锁定创建周累计凭证任务所涉及的既有已通过发票与当前触发发票。
+async function findInvoicesForWeeklyVoucherRequirement({
+  connection = pool,
+  sellerTaxId,
+  cumulativeWeekStart,
+  triggerInvoiceId,
+  forUpdate = true,
+}) {
+  const lockClause = forUpdate ? ' FOR UPDATE' : ''
+  const [rows] = await connection.execute(
+    `SELECT
+       id,
+       invoice_number,
+       seller_tax_id,
+       total_amount,
+       submitted_at,
+       qualification_status,
+       finance_status,
+       reimbursement_status,
+       cumulative_amount,
+       cumulative_week_start
+     FROM invoices
+     WHERE (
+       seller_tax_id = ?
+       AND cumulative_week_start = ?
+       AND qualification_status = 'approved'
+     )
+       OR id = ?
+     ORDER BY
+       CASE
+         WHEN id = ? THEN 1
+         ELSE 0
+       END,
+       id${lockClause}`,
+    [
+      sellerTaxId,
+      cumulativeWeekStart,
+      triggerInvoiceId,
+      triggerInvoiceId,
+    ],
+  )
+
+  return rows
+}
+
 // 更新发票资质审核状态
 async function updateInvoiceQualificationReview({
   connection = pool,
@@ -371,6 +416,7 @@ module.exports = {
   getWeekStart,
   findApprovedInvoicesForWeek,
   findApprovedInvoicesForWeekPreview,
+  findInvoicesForWeeklyVoucherRequirement,
   updateInvoiceQualificationReview,
   createQualificationReviewLog,
 }

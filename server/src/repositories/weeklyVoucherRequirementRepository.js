@@ -235,6 +235,45 @@ async function findPendingRequirementsByInvoiceId({
   return rows
 }
 
+// 查询发票参与的全部周累计凭证任务，包含进行中和历史任务。
+async function findRequirementsByInvoiceId({
+  connection = pool,
+  invoiceId,
+}) {
+  const [rows] = await connection.execute(
+    `SELECT
+       wvr.id,
+       wvr.seller_tax_id,
+       wvr.cumulative_week_start,
+       wvr.trigger_invoice_id,
+       wvr.triggered_cumulative_amount,
+       wvr.status,
+       wvr.completed_at,
+       wvr.cancelled_at,
+       wvr.created_at,
+       wvr.updated_at,
+       wvri.id AS requirement_invoice_id,
+       wvri.invoice_role,
+       wvri.voucher_status,
+       wvri.approved_voucher_group_id,
+       wvri.completed_at AS invoice_completed_at
+     FROM weekly_voucher_requirement_invoices wvri
+     JOIN weekly_voucher_requirements wvr ON wvr.id = wvri.requirement_id
+     WHERE wvri.invoice_id = ?
+     ORDER BY
+       CASE wvr.status
+         WHEN 'pending' THEN 0
+         WHEN 'completed' THEN 1
+         ELSE 2
+       END,
+       wvr.created_at DESC,
+       wvr.id DESC`,
+    [invoiceId],
+  )
+
+  return rows
+}
+
 // 更新某张关联发票的凭证完成状态。
 async function updateRequirementInvoiceVoucherStatus({
   connection = pool,
@@ -341,6 +380,7 @@ module.exports = {
   findPendingRequirementByTriggerInvoiceId,
   findPendingRequirementForWeek,
   findPendingRequirementsByInvoiceId,
+  findRequirementsByInvoiceId,
   findRequirementById,
   findRequirementInvoices,
   getRequirementProgress,

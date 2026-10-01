@@ -1,6 +1,7 @@
 const { pool } = require('../config/database')
 const invoiceReviewRepository = require('../repositories/invoiceReviewRepository')
 const voucherRepository = require('../repositories/voucherRepository')
+const weeklyVoucherRequirementRepository = require('../repositories/weeklyVoucherRequirementRepository')
 const {
   PRICE_TYPES,
   classifyUnitPrice,
@@ -134,12 +135,129 @@ function sumInvoiceAmountsInCents(invoices) {
     0,
   )
 }
+
+// 处理累计超过 1000 元时 A/B/C 发票共同补齐支付凭证的任务。
+async function resolveWeeklyVoucherRequirement({
+  connection,
+  invoice,
+  cumulativeWeekStart,
+  cumulativeAmount,
+  persistRequirement,
+}) {
+  const relatedInvoices = await invoiceReviewRepository.findInvoicesForWeeklyVoucherRequirement({
+    connection,
+    sellerTaxId: invoice.seller_tax_id,
+    cumulativeWeekStart,
+    triggerInvoiceId: invoice.id,
+    forUpdate: persistRequirement,
+  })
+  const triggerInvoice = relatedInvoices.find((relatedInvoice) => {
+    return Number(relatedInvoice.id) === Number(invoice.id)
+  })
+
+  if (!triggerInvoice) {
+    throw createHttpError(409, '当前发票未纳入周累计凭证任务范围')
+  }
+
+  const evaluatedAt = new Date()
+  const relatedInvoiceVouchers = []
+
+  for (const relatedInvoice of relatedInvoices) {
+    const approvedVoucherGroup = await voucherRepository.findApprovedCompleteGroup({
+      connection,
+      invoiceId: relatedInvoice.id,
+      forUpdate: persistRequirement,
+    })
+
+    relatedInvoiceVouchers.push({
+      invoice: relatedInvoice,
+      approvedVoucherGroup,
+    })
+  }
+
+  const allInvoicesHaveApprovedVoucher = relatedInvoiceVouchers.every((entry) => {
+    return Boolean(entry.approvedVoucherGroup)
+  })
+
+  if (!persistRequirement) {
+    return {
+      allInvoicesHaveApprovedVoucher,
+      relatedInvoiceCount: relatedInvoiceVouchers.length,
+      requirement: null,
+    }
+  }
+
+  const existingRequirement = await weeklyVoucherRequirementRepository.findPendingRequirementForWeek({
+    connection,
+    sellerTaxId: invoice.seller_tax_id,
+    cumulativeWeekStart,
+    forUpdate: true,
+  })
+
+  if (existingRequirement) {
+    throw createHttpError(
+      409,
+      '同一销售方本自然周已有未完成的凭证补齐任务，请先完成或放弃该任务',
+    )
+  }
+
+  const requirement = await weeklyVoucherRequirementRepository.createRequirement({
+    connection,
+    sellerTaxId: invoice.seller_tax_id,
+    cumulativeWeekStart,
+    triggerInvoiceId: invoice.id,
+    triggeredCumulativeAmount: cumulativeAmount,
+  })
+
+  for (const entry of relatedInvoiceVouchers) {
+    const completedAt = entry.approvedVoucherGroup
+      ? entry.approvedVoucherGroup.reviewed_at || evaluatedAt
+      : null
+
+    await weeklyVoucherRequirementRepository.createRequirementInvoice({
+      connection,
+      requirementId: requirement.id,
+      invoiceId: entry.invoice.id,
+      invoiceRole: Number(entry.invoice.id) === Number(invoice.id)
+        ? 'trigger'
+        : 'existing',
+      voucherStatus: entry.approvedVoucherGroup ? 'approved' : 'pending',
+      approvedVoucherGroupId: entry.approvedVoucherGroup?.id || null,
+      completedAt,
+    })
+  }
+
+  if (allInvoicesHaveApprovedVoucher) {
+    await weeklyVoucherRequirementRepository.completeRequirement({
+      connection,
+      requirementId: requirement.id,
+      completedAt: evaluatedAt,
+    })
+
+    return {
+      allInvoicesHaveApprovedVoucher,
+      relatedInvoiceCount: relatedInvoiceVouchers.length,
+      requirement: {
+        ...requirement,
+        status: 'completed',
+      },
+    }
+  }
+
+  return {
+    allInvoicesHaveApprovedVoucher,
+    relatedInvoiceCount: relatedInvoiceVouchers.length,
+    requirement,
+  }
+}
+
 // 执行规则审核的完整业务决策链，返回最终状态和累计金额。
 async function resolveApprovalDecision({
   connection,
   invoice,
   items,
   findApprovedInvoicesForWeek = invoiceReviewRepository.findApprovedInvoicesForWeek,
+  persistWeeklyVoucherRequirement = true,
 }) {
   const categoryDecision = getCategoryDecision(items)
   if (categoryDecision) {
@@ -204,21 +322,48 @@ async function resolveApprovalDecision({
     }
   }
 
-  const requiresVoucher = priceDecision.hasLowValue || cumulativeAmount > 1000
-  if (requiresVoucher) {
+  if (cumulativeAmount > 1000) {
+    const weeklyVoucherDecision = await resolveWeeklyVoucherRequirement({
+      connection,
+      invoice,
+      cumulativeWeekStart: weekStart,
+      cumulativeAmount,
+      persistRequirement: persistWeeklyVoucherRequirement,
+    })
+
+    if (!weeklyVoucherDecision.allInvoicesHaveApprovedVoucher) {
+      return {
+        qualificationStatus: 'pending_voucher',
+        qualificationReason: `同销售方本自然周累计金额为 ${cumulativeAmount.toFixed(2)} 元，已关联 ${weeklyVoucherDecision.relatedInvoiceCount} 张发票，需全部补齐并审核通过支付凭证`,
+        cumulativeAmount,
+        cumulativeWeekStart: weekStart,
+        submittedAt,
+        priorCumulativeAmount,
+        weeklyVoucherRequirement: weeklyVoucherDecision.requirement,
+      }
+    }
+
+    return {
+      qualificationStatus: 'approved',
+      qualificationReason: '商品品类、单价、同周关联发票支付凭证和自然周累计规则校验通过',
+      cumulativeAmount,
+      cumulativeWeekStart: weekStart,
+      submittedAt,
+      priorCumulativeAmount,
+      weeklyVoucherRequirement: weeklyVoucherDecision.requirement,
+    }
+  }
+
+  if (priceDecision.hasLowValue) {
     const hasVoucher = await voucherRepository.hasApprovedCompleteGroup({
       connection,
       invoiceId: invoice.id,
     })
 
     if (!hasVoucher) {
-      const reason = priceDecision.hasLowValue
-        ? '发票包含低值品，需补充并审核通过订单截图和支付记录'
-        : `同销售方本自然周累计金额为 ${cumulativeAmount.toFixed(2)} 元，需补充支付凭证`
-
       return {
         qualificationStatus: 'pending_voucher',
-        qualificationReason: reason,
+        qualificationReason: '发票包含低值品，需补充并审核通过订单截图和支付记录',
         cumulativeAmount,
         cumulativeWeekStart: weekStart,
         submittedAt,
@@ -266,6 +411,7 @@ async function getInvoiceQualificationPreview({
     invoice,
     items,
     findApprovedInvoicesForWeek: invoiceReviewRepository.findApprovedInvoicesForWeekPreview,
+    persistWeeklyVoucherRequirement: false,
   })
 
   return {
@@ -494,12 +640,32 @@ async function reviewInvoiceQualification({
         items,
       })
     } else {
+      const pendingRequirement = await weeklyVoucherRequirementRepository.findPendingRequirementByTriggerInvoiceId({
+        connection,
+        triggerInvoiceId: normalizedInvoiceId,
+        forUpdate: true,
+      })
+
+      if (pendingRequirement) {
+        await weeklyVoucherRequirementRepository.cancelRequirement({
+          connection,
+          requirementId: pendingRequirement.id,
+          cancelledAt: new Date(),
+        })
+      }
+
       decision = {
         qualificationStatus: 'cancelled',
         qualificationReason: normalizedNote,
         cumulativeAmount: invoice.cumulative_amount,
         cumulativeWeekStart: invoice.cumulative_week_start,
         submittedAt: invoice.submitted_at,
+        weeklyVoucherRequirement: pendingRequirement
+          ? {
+            id: pendingRequirement.id,
+            status: 'cancelled',
+          }
+          : null,
       }
     }
 
@@ -531,6 +697,7 @@ async function reviewInvoiceQualification({
       cumulativeWeekStart,
       submittedAt: submittedAt || invoice.submitted_at,
       manualNote,
+      weeklyVoucherRequirement: decision.weeklyVoucherRequirement || null,
     }
 
     await invoiceReviewRepository.createQualificationReviewLog({
@@ -555,6 +722,7 @@ async function reviewInvoiceQualification({
       cumulativeWeekStart,
       submittedAt: submittedAt || invoice.submitted_at,
       manualNote,
+      weeklyVoucherRequirement: decision.weeklyVoucherRequirement || null,
     }
   } catch (error) {
     await connection.rollback()

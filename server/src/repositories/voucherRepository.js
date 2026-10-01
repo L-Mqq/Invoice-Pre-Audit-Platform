@@ -240,13 +240,22 @@ async function findGroupsByInvoiceId({
   }))
 }
 
-// 判断是否存在完整且审核通过的凭证组
-async function hasApprovedCompleteGroup({
+// 查询完整且已审核通过的凭证组；创建周累计任务时可复用该凭证组。
+async function findApprovedCompleteGroup({
   connection = pool,
   invoiceId,
+  forUpdate = false,
 }) {
+  const lockClause = forUpdate ? ' FOR UPDATE' : ''
   const [rows] = await connection.execute(
-    `SELECT 1
+    `SELECT
+       vg.id,
+       vg.invoice_id,
+       vg.group_name,
+       vg.review_status,
+       vg.reviewed_by,
+       vg.reviewed_at,
+       vg.review_note
        FROM voucher_groups vg
       WHERE vg.invoice_id = ?
         AND vg.review_status = 'approved'
@@ -262,11 +271,25 @@ async function hasApprovedCompleteGroup({
            WHERE v2.voucher_group_id = vg.id
              AND v2.voucher_type = 'payment_record'
         )
-      LIMIT 1`,
+      ORDER BY vg.reviewed_at DESC, vg.id DESC
+      LIMIT 1${lockClause}`,
     [invoiceId],
   )
 
-  return rows.length > 0
+  return rows[0] || null
+}
+
+// 判断是否存在完整且审核通过的凭证组。
+async function hasApprovedCompleteGroup({
+  connection = pool,
+  invoiceId,
+}) {
+  const group = await findApprovedCompleteGroup({
+    connection,
+    invoiceId,
+  })
+
+  return Boolean(group)
 }
 
 // 写入凭证组操作日志
@@ -348,6 +371,7 @@ module.exports = {
   createVoucherOperationLog,
   createVoucherFile,
   createVoucherGroup,
+  findApprovedCompleteGroup,
   findGroupsByInvoiceId,
   findInvoiceById,
   findVoucherFileById,

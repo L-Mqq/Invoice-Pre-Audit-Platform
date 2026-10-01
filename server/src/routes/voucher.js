@@ -45,6 +45,11 @@ router.get(
   '/invoices/:invoiceId/voucher-groups',
   voucherController.listVoucherGroups,
 )
+// 获取周累计凭证任务及关联发票进度。
+router.get(
+  '/invoices/:invoiceId/weekly-voucher-requirements',
+  voucherController.getWeeklyVoucherRequirements,
+)
 // 上传凭证组
 router.post(
   '/invoices/:invoiceId/voucher-groups',

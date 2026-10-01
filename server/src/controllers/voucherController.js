@@ -16,6 +16,22 @@ async function listVoucherGroups(req, res, next) {
   }
 }
 
+// 查询周累计凭证任务及关联发票进度。
+async function getWeeklyVoucherRequirements(req, res, next) {
+  try {
+    const result = await voucherService.getWeeklyVoucherRequirements({
+      invoiceId: req.params.invoiceId,
+    })
+
+    res.json({
+      success: true,
+      data: result,
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
 // 创建凭证组
 async function createVoucherGroup(req, res, next) {
   try {
@@ -74,6 +90,7 @@ async function reviewVoucherGroup(req, res, next) {
 
 module.exports = {
   createVoucherGroup,
+  getWeeklyVoucherRequirements,
   listVoucherGroups,
   reviewVoucherGroup,
   uploadVoucherFile,
