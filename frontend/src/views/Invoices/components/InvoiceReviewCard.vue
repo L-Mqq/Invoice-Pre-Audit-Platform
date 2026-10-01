@@ -8,11 +8,21 @@ defineProps<{
   canEnterInvoiceReview: boolean
   isCategoryEditable: boolean
   submitReviewLoading: boolean
+  isVoucherRequired: boolean
+  voucherStatusLabel: string
+  voucherStatusDescription: string
+  voucherStatusType: 'success' | 'warning' | 'danger' | 'info'
+  primaryVoucherActionLabel: string | null
+  canViewVouchers: boolean
+  voucherGroupsLoading: boolean
+  voucherGroupsError: string
 }>()
 
 const emit = defineEmits<{
   submitReview: []
   enterReview: []
+  submitVoucher: []
+  viewVoucher: []
 }>()
 
 function formatAmount(amount: number | string | null): string {
@@ -82,27 +92,45 @@ function getReviewStatusType(
     </div>
 
     <div
-      v-if="invoice.qualificationStatus === 'pending_voucher'"
+      v-if="isVoucherRequired"
       class="voucher-actions"
     >
       <div class="voucher-status">
         <span>凭证状态</span>
-        <strong>待提交凭证</strong>
-        <small>请准备订单截图和支付记录，两个文件齐全后由管理员核验。</small>
+        <el-tag
+          :type="voucherStatusType"
+          effect="plain"
+        >
+          {{ voucherStatusLabel }}
+        </el-tag>
+        <small>{{ voucherStatusDescription }}</small>
       </div>
+
+      <el-alert
+        v-if="voucherGroupsError"
+        class="voucher-load-error"
+        :title="voucherGroupsError"
+        type="error"
+        :closable="false"
+        show-icon
+      />
 
       <div class="voucher-action-buttons">
         <el-button
+          v-if="primaryVoucherActionLabel"
           type="primary"
-          disabled
+          :loading="voucherGroupsLoading"
+          :disabled="Boolean(voucherGroupsError)"
+          @click="emit('submitVoucher')"
         >
-          提交凭证
+          {{ primaryVoucherActionLabel }}
         </el-button>
-        <el-button disabled>
+        <el-button
+          v-if="canViewVouchers"
+          :disabled="voucherGroupsLoading || Boolean(voucherGroupsError)"
+          @click="emit('viewVoucher')"
+        >
           查看凭证
-        </el-button>
-        <el-button disabled>
-          重新提交凭证
         </el-button>
       </div>
     </div>
@@ -239,6 +267,10 @@ function getReviewStatusType(
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.voucher-load-error {
+  width: 100%;
 }
 
 @media (max-width: 600px) {

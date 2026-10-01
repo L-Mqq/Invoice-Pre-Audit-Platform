@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import {
+  ref,
+} from 'vue'
+import { ElMessage } from 'element-plus'
 import { useRouter } from 'vue-router'
 import type { InvoiceDetailItem } from '../../apis/invoices'
 import InvoiceBasicInfo from './components/InvoiceBasicInfo.vue'
@@ -12,6 +15,7 @@ import { useInvoiceCategoryReview } from './composables/useInvoiceCategoryReview
 import { useInvoiceDetail } from './composables/useInvoiceDetail'
 import { useInvoiceFileActions } from './composables/useInvoiceFileActions'
 import { useInvoiceReviewSubmission } from './composables/useInvoiceReviewSubmission'
+import { useInvoiceVoucher } from './composables/useInvoiceVoucher'
 
 const router = useRouter()
 const qualificationReviewVisible = ref(false)
@@ -58,6 +62,19 @@ const {
   loadInvoiceDetail,
 })
 
+const {
+  canViewVouchers,
+  isVoucherRequired,
+  primaryVoucherActionLabel,
+  voucherGroupsError,
+  voucherGroupsLoading,
+  voucherStatusDescription,
+  voucherStatusLabel,
+  voucherStatusType,
+} = useInvoiceVoucher({
+  invoiceDetail,
+})
+
 function formatAmount(amount: number | string | null): string {
   return `¥${Number(amount || 0).toFixed(2)}`
 }
@@ -90,6 +107,14 @@ function goBack() {
 
 function openQualificationReview() {
   qualificationReviewVisible.value = true
+}
+
+function handleSubmitVoucher() {
+  ElMessage.info('凭证提交弹窗待接入')
+}
+
+function handleViewVoucher() {
+  ElMessage.info('凭证查看弹窗待接入')
 }
 
 </script>
@@ -172,8 +197,18 @@ function openQualificationReview() {
             :can-enter-invoice-review="canEnterInvoiceReview"
             :is-category-editable="isCategoryEditable"
             :submit-review-loading="submitReviewLoading"
+            :is-voucher-required="isVoucherRequired"
+            :voucher-status-label="voucherStatusLabel"
+            :voucher-status-description="voucherStatusDescription"
+            :voucher-status-type="voucherStatusType"
+            :primary-voucher-action-label="primaryVoucherActionLabel"
+            :can-view-vouchers="canViewVouchers"
+            :voucher-groups-loading="voucherGroupsLoading"
+            :voucher-groups-error="voucherGroupsError"
             @submit-review="submitInvoiceReview"
             @enter-review="openQualificationReview"
+            @submit-voucher="handleSubmitVoucher"
+            @view-voucher="handleViewVoucher"
           />
         </div>
 
