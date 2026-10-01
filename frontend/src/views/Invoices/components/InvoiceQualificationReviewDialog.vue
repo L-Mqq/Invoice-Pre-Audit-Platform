@@ -11,6 +11,7 @@ import type {
   VoucherType,
 } from '../../../apis/voucher'
 import type { InvoiceQualificationAction } from '../../../apis/invoiceReview'
+import { formatChinaDate } from '../../../utils/date'
 import { getQualificationStatusLabel } from '../../../utils/status'
 
 const visible = defineModel<boolean>('visible', {
@@ -176,7 +177,7 @@ watch(
           </div>
           <div>
             <span>累计所属周</span>
-            <strong>{{ invoice.cumulativeWeekStart || '尚未计算' }}</strong>
+            <strong>{{ formatChinaDate(invoice.cumulativeWeekStart) || '尚未计算' }}</strong>
           </div>
         </div>
       </section>

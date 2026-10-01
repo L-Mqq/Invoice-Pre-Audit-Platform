@@ -3,6 +3,10 @@ import type {
   InvoiceDetail,
   InvoiceDetailFile,
 } from '../../../apis/invoices'
+import {
+  formatChinaDate,
+  formatChinaDateTime,
+} from '../../../utils/date'
 
 defineProps<{
   invoice: InvoiceDetail
@@ -56,7 +60,7 @@ function getExtractionStatusType(status: InvoiceDetailFile['extractionStatus']) 
       </div>
       <div>
         <span>开票日期</span>
-        <strong>{{ invoice.invoiceDate || '未识别' }}</strong>
+        <strong>{{ formatChinaDate(invoice.invoiceDate) || '未识别' }}</strong>
       </div>
       <div>
         <span>销售方名称</span>
@@ -76,11 +80,11 @@ function getExtractionStatusType(status: InvoiceDetailFile['extractionStatus']) 
       </div>
       <div>
         <span>上传时间</span>
-        <strong>{{ invoice.createdAt }}</strong>
+        <strong>{{ formatChinaDateTime(invoice.createdAt) || '未识别' }}</strong>
       </div>
       <div>
         <span>提交审核时间</span>
-        <strong>{{ invoice.submittedAt || '尚未提交' }}</strong>
+        <strong>{{ formatChinaDateTime(invoice.submittedAt) || '尚未提交' }}</strong>
       </div>
     </div>
   </el-card>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { InvoiceDetail } from '../../../apis/invoices'
+import { formatChinaDate } from '../../../utils/date'
 import { getQualificationStatusLabel } from '../../../utils/status'
 
 defineProps<{
@@ -28,6 +29,35 @@ const emit = defineEmits<{
 
 function formatAmount(amount: number | string | null): string {
   return `¥${Number(amount || 0).toFixed(2)}`
+}
+
+function hasCumulativeResult(invoice: InvoiceDetail): boolean {
+  return invoice.cumulativeAmount !== null
+    && Boolean(invoice.cumulativeWeekStart)
+}
+
+function getCumulativeAmountDisplay(invoice: InvoiceDetail): string {
+  if (hasCumulativeResult(invoice)) {
+    return formatAmount(invoice.cumulativeAmount)
+  }
+
+  if (!invoice.submittedAt || invoice.qualificationStatus === 'pending') {
+    return '尚未完成规则审核'
+  }
+
+  return '不适用'
+}
+
+function getCumulativeWeekDisplay(invoice: InvoiceDetail): string {
+  if (hasCumulativeResult(invoice)) {
+    return formatChinaDate(invoice.cumulativeWeekStart)
+  }
+
+  if (!invoice.submittedAt || invoice.qualificationStatus === 'pending') {
+    return '尚未完成规则审核'
+  }
+
+  return '不适用'
 }
 
 function getReviewStatusLabel(invoice: InvoiceDetail): string {
@@ -80,11 +110,11 @@ function getReviewStatusType(
       </div>
       <div>
         <span>自然周累计</span>
-        <strong>{{ formatAmount(invoice.cumulativeAmount) }}</strong>
+        <strong>{{ getCumulativeAmountDisplay(invoice) }}</strong>
       </div>
       <div>
         <span>累计所属周</span>
-        <strong>{{ invoice.cumulativeWeekStart || '尚未计算' }}</strong>
+        <strong>{{ getCumulativeWeekDisplay(invoice) }}</strong>
       </div>
       <div>
         <span>人工处理备注</span>
