@@ -6,6 +6,8 @@ const router = express.Router()
 
 router.use(authMiddleware)
 
+router.get('/weeks', controller.listWeeks)
+
 // 提交财务数据
 router.post('/weeks/submit', controller.submitWeek)
 

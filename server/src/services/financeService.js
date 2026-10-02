@@ -10,6 +10,10 @@ const ALLOWED_REIMBURSEMENT_STATUSES = new Set([
   'success',
   'failed',
 ])
+const ALLOWED_FINANCE_STATUSES = new Set([
+  'not_submitted',
+  'submitted',
+])
 
 // 创建带 HTTP 状态码的错误
 function createHttpError(statusCode, message) {
@@ -86,6 +90,48 @@ function parseCumulativeWeekStart(value) {
   return value
 }
 
+function parseOptionalCumulativeWeekStart(value) {
+  if (value === undefined || value === null || value === '') {
+    return undefined
+  }
+
+  return parseCumulativeWeekStart(value)
+}
+
+function parseOptionalFinanceStatus(value) {
+  if (value === undefined || value === null || value === '') {
+    return undefined
+  }
+
+  if (!ALLOWED_FINANCE_STATUSES.has(value)) {
+    throw createHttpError(400, '财务提交状态无效')
+  }
+
+  return value
+}
+
+function parseOptionalSellerKeyword(value) {
+  if (value === undefined || value === null || value === '') {
+    return undefined
+  }
+
+  if (typeof value !== 'string') {
+    throw createHttpError(400, '销售方筛选条件无效')
+  }
+
+  const keyword = value.trim()
+
+  if (!keyword) {
+    return undefined
+  }
+
+  if (keyword.length > 255) {
+    throw createHttpError(400, '销售方筛选条件过长')
+  }
+
+  return keyword
+}
+
 // 返回上海时区的日期字符串
 function getShanghaiDateString(date = new Date()) {
   const formatter = new Intl.DateTimeFormat('en-CA', {
@@ -126,6 +172,215 @@ function formatInvoiceNumbers(invoices) {
   return invoices
     .map((invoice) => invoice.invoice_number || `#${invoice.id}`)
     .join('、')
+}
+
+// 把金额转成“分
+function amountToCents(value) {
+  return Math.round(Number(value || 0) * 100)
+}
+
+// 根据“周一”，算出“周日
+function getWeekEnd(cumulativeWeekStart) {
+  const date = new Date(`${cumulativeWeekStart}T00:00:00.000Z`)
+
+  date.setUTCDate(date.getUTCDate() + 6)
+
+  return date.toISOString().slice(0, 10)
+}
+
+// 生成“财务组”的唯一 key
+function getFinanceWeekKey({
+  sellerTaxId,
+  cumulativeWeekStart,
+}) {
+  return `${sellerTaxId}#${cumulativeWeekStart}`
+}
+
+// 创建一个“财务组”的初始结构
+function createFinanceWeekGroup({
+  invoice,
+  voucherProgress,
+}) {
+  return {
+    sellerName: invoice.seller_name || '未识别销售方名称',
+    sellerTaxId: invoice.seller_tax_id,
+    weekStart: invoice.submitted_week_start,
+    weekEnd: getWeekEnd(invoice.submitted_week_start),
+    totalInvoiceCount: 0,
+    approvedInvoiceCount: 0,
+    pendingInvoiceCount: 0,
+    rejectedInvoiceCount: 0,
+    cancelledInvoiceCount: 0,
+    submittedApprovedInvoiceCount: 0,
+    invalidSnapshotCount: 0,
+    validCumulativeAmountInCents: 0,
+    reimbursementSummary: {
+      notCompletedCount: 0,
+      successCount: 0,
+      failedCount: 0,
+    },
+    voucherProgress: {
+      requiredInvoiceCount: Number(voucherProgress?.required_invoice_count || 0),
+      approvedInvoiceCount: Number(voucherProgress?.approved_invoice_count || 0),
+      hasPendingRequirement: Boolean(voucherProgress),
+    },
+  }
+}
+
+// 把一张发票的数据，累加到对应的“财务组”里
+function appendInvoiceToFinanceWeekGroup({
+  group,
+  invoice,
+}) {
+  group.totalInvoiceCount += 1
+
+  if (BLOCKING_QUALIFICATION_STATUSES.has(invoice.qualification_status)) {
+    group.pendingInvoiceCount += 1
+    return
+  }
+
+  if (invoice.qualification_status === 'rejected') {
+    group.rejectedInvoiceCount += 1
+    return
+  }
+
+  if (invoice.qualification_status === 'cancelled') {
+    group.cancelledInvoiceCount += 1
+    return
+  }
+
+  if (invoice.qualification_status !== 'approved') {
+    return
+  }
+
+  group.approvedInvoiceCount += 1
+  group.validCumulativeAmountInCents += amountToCents(invoice.total_amount)
+
+  if (invoice.cumulative_week_start !== group.weekStart) {
+    group.invalidSnapshotCount += 1
+  }
+
+  if (invoice.finance_status === 'submitted') {
+    group.submittedApprovedInvoiceCount += 1
+  }
+
+  if (invoice.reimbursement_status === 'success') {
+    group.reimbursementSummary.successCount += 1
+  } else if (invoice.reimbursement_status === 'failed') {
+    group.reimbursementSummary.failedCount += 1
+  } else {
+    group.reimbursementSummary.notCompletedCount += 1
+  }
+}
+
+// 函数把“财务组”转成前端格式，同时算出“能不能提交财务”和“不能提交的原因”
+function serializeFinanceWeekGroup({
+  group,
+  now,
+}) {
+  const validCumulativeAmount = group.validCumulativeAmountInCents / 100
+  const financeStatus = group.approvedInvoiceCount > 0
+    && group.submittedApprovedInvoiceCount === group.approvedInvoiceCount
+    ? 'submitted'
+    : 'not_submitted'
+  let submitBlockedReason = null
+
+  if (financeStatus === 'not_submitted') {
+    if (!isWeekCompleted({ cumulativeWeekStart: group.weekStart, now })) {
+      submitBlockedReason = '该自然周尚未结束，请于下一周周一后提交财务'
+    } else if (group.pendingInvoiceCount > 0) {
+      submitBlockedReason = `组内仍有 ${group.pendingInvoiceCount} 张发票待审核或待补凭证`
+    } else if (group.voucherProgress.hasPendingRequirement) {
+      submitBlockedReason = '该自然周存在未完成的周累计凭证补齐任务'
+    } else if (group.approvedInvoiceCount === 0) {
+      submitBlockedReason = '该自然周没有可提交财务的审核通过发票'
+    } else if (group.invalidSnapshotCount > 0) {
+      submitBlockedReason = '存在自然周审核快照异常的发票，请先重新审核'
+    } else if (group.submittedApprovedInvoiceCount > 0) {
+      submitBlockedReason = '存在已进入财务流程的发票，请人工处理该异常组'
+    } else if (validCumulativeAmount > 3000) {
+      submitBlockedReason = '该自然周审核通过发票累计金额超过 3000 元，不能提交财务'
+    }
+  }
+
+  return {
+    sellerName: group.sellerName,
+    sellerTaxId: group.sellerTaxId,
+    weekStart: group.weekStart,
+    weekEnd: group.weekEnd,
+    totalInvoiceCount: group.totalInvoiceCount,
+    approvedInvoiceCount: group.approvedInvoiceCount,
+    pendingInvoiceCount: group.pendingInvoiceCount,
+    rejectedInvoiceCount: group.rejectedInvoiceCount,
+    cancelledInvoiceCount: group.cancelledInvoiceCount,
+    validCumulativeAmount,
+    voucherProgress: group.voucherProgress,
+    financeStatus,
+    reimbursementSummary: group.reimbursementSummary,
+    canSubmitFinance: financeStatus === 'not_submitted' && !submitBlockedReason,
+    submitBlockedReason,
+  }
+}
+
+// 报销进度页的核心数据
+async function listFinanceWeeks({
+  financeStatus,
+  cumulativeWeekStart,
+  sellerKeyword,
+}) {
+  const normalizedFinanceStatus = parseOptionalFinanceStatus(financeStatus)
+  const normalizedWeekStart = parseOptionalCumulativeWeekStart(cumulativeWeekStart)
+  const normalizedSellerKeyword = parseOptionalSellerKeyword(sellerKeyword)
+  const [invoices, voucherProgressRows] = await Promise.all([
+    financeRepository.findInvoicesForFinanceWeekList({
+      sellerKeyword: normalizedSellerKeyword,
+      cumulativeWeekStart: normalizedWeekStart,
+    }),
+    financeRepository.findPendingWeeklyVoucherProgress(),
+  ])
+  const voucherProgressByWeek = new Map(
+    voucherProgressRows.map((row) => [
+      getFinanceWeekKey({
+        sellerTaxId: row.seller_tax_id,
+        cumulativeWeekStart: row.cumulative_week_start,
+      }),
+      row,
+    ]),
+  )
+  const groupsByWeek = new Map()
+
+  for (const invoice of invoices) {
+    const groupKey = getFinanceWeekKey({
+      sellerTaxId: invoice.seller_tax_id,
+      cumulativeWeekStart: invoice.submitted_week_start,
+    })
+    let group = groupsByWeek.get(groupKey)
+
+    if (!group) {
+      group = createFinanceWeekGroup({
+        invoice,
+        voucherProgress: voucherProgressByWeek.get(groupKey),
+      })
+      groupsByWeek.set(groupKey, group)
+    }
+
+    appendInvoiceToFinanceWeekGroup({ group, invoice })
+  }
+
+  const allGroups = [...groupsByWeek.values()]
+    .map((group) => serializeFinanceWeekGroup({ group, now: new Date() }))
+    .sort((left, right) => right.weekStart.localeCompare(left.weekStart))
+  const items = normalizedFinanceStatus
+    ? allGroups.filter((group) => group.financeStatus === normalizedFinanceStatus)
+    : allGroups
+
+  return {
+    summary: {
+      pendingGroupCount: allGroups.filter((group) => group.financeStatus === 'not_submitted').length,
+      submittedGroupCount: allGroups.filter((group) => group.financeStatus === 'submitted').length,
+    },
+    items,
+  }
 }
 
 // 提交财务数据
@@ -318,6 +573,7 @@ async function updateInvoiceReimbursementStatus({
 }
 
 module.exports = {
+  listFinanceWeeks,
   submitFinanceWeek,
   updateInvoiceReimbursementStatus,
 }

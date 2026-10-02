@@ -56,6 +56,77 @@ async function findPendingWeeklyVoucherRequirement({
   return rows[0] || null
 }
 
+// 查询报销进度页所需的发票数据，自然周以提交审核时间为准。
+async function findInvoicesForFinanceWeekList({
+  connection = pool,
+  sellerKeyword,
+  cumulativeWeekStart,
+}) {
+  const conditions = [
+    'i.seller_tax_id IS NOT NULL',
+    'i.submitted_at IS NOT NULL',
+  ]
+  const params = []
+
+  if (sellerKeyword) {
+    conditions.push('(i.seller_name LIKE ? OR i.seller_tax_id LIKE ?)')
+    params.push(`%${sellerKeyword}%`)
+    params.push(`%${sellerKeyword}%`)
+  }
+
+  if (cumulativeWeekStart) {
+    conditions.push('i.submitted_at >= ?')
+    conditions.push('i.submitted_at < DATE_ADD(?, INTERVAL 7 DAY)')
+    params.push(cumulativeWeekStart)
+    params.push(cumulativeWeekStart)
+  }
+
+  const [rows] = await connection.execute(
+    `SELECT
+       i.id,
+       i.seller_name,
+       i.seller_tax_id,
+       i.total_amount,
+       i.qualification_status,
+       i.finance_status,
+       i.reimbursement_status,
+       DATE_FORMAT(i.cumulative_week_start, '%Y-%m-%d') AS cumulative_week_start,
+       DATE_FORMAT(
+         DATE_SUB(DATE(i.submitted_at), INTERVAL WEEKDAY(i.submitted_at) DAY),
+         '%Y-%m-%d'
+       ) AS submitted_week_start
+     FROM invoices i
+     WHERE ${conditions.join('\n       AND ')}
+     ORDER BY i.submitted_at DESC, i.id DESC`,
+    params,
+  )
+
+  return rows
+}
+
+// 查询进行中的周累计凭证任务及其关联发票凭证进度。
+async function findPendingWeeklyVoucherProgress({
+  connection = pool,
+} = {}) {
+  const [rows] = await connection.execute(
+    `SELECT
+       wvr.seller_tax_id,
+       DATE_FORMAT(wvr.cumulative_week_start, '%Y-%m-%d') AS cumulative_week_start,
+       COUNT(wvri.id) AS required_invoice_count,
+       SUM(wvri.voucher_status = 'approved') AS approved_invoice_count
+     FROM weekly_voucher_requirements wvr
+     LEFT JOIN weekly_voucher_requirement_invoices wvri
+       ON wvri.requirement_id = wvr.id
+     WHERE wvr.status = 'pending'
+     GROUP BY
+       wvr.id,
+       wvr.seller_tax_id,
+       wvr.cumulative_week_start`,
+  )
+
+  return rows
+}
+
 // 事务内将同一财务提交组的所有合格发票标记为已提交财务。
 async function markInvoicesAsFinanceSubmitted({
   connection = pool,
@@ -206,6 +277,8 @@ async function createReimbursementStatusLog({
 module.exports = {
   findInvoicesForWeekSubmission,
   findPendingWeeklyVoucherRequirement,
+  findInvoicesForFinanceWeekList,
+  findPendingWeeklyVoucherProgress,
   markInvoicesAsFinanceSubmitted,
   createFinanceSubmissionLogs,
   findInvoiceForReimbursementUpdate,
