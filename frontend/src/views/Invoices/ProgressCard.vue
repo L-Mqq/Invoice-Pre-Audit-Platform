@@ -1,3 +1,754 @@
+<script setup lang="ts">
+import {
+  computed,
+  ref,
+} from 'vue'
+import {
+  ElMessage,
+} from 'element-plus'
+import {
+  useRouter,
+} from 'vue-router'
+
+type FinanceStatus = 'not_submitted' | 'submitted'
+type ReimbursementStatus = 'not_completed' | 'success' | 'failed'
+
+interface ProgressInvoice {
+  id: number
+  invoiceNumber: string
+  totalAmount: number
+  qualificationStatus: string
+  voucherStatus: string
+  financeStatus: FinanceStatus
+  reimbursementStatus: ReimbursementStatus
+}
+
+interface FinanceWeekGroup {
+  id: string
+  sellerName: string
+  sellerTaxId: string
+  weekStart: string
+  weekEnd: string
+  totalAmount: number
+  qualificationApprovedCount: number
+  voucherProgress: string
+  financeStatus: FinanceStatus
+  reimbursementSummary: string
+  submitBlockedReason: string
+  invoices: ProgressInvoice[]
+}
+
+const router = useRouter()
+const activeTab = ref<FinanceStatus>('not_submitted')
+const weekFilter = ref('all')
+const sellerFilter = ref('')
+const expandedGroupIds = ref<string[]>([])
+
+const groups = ref<FinanceWeekGroup[]>([
+  {
+    id: '2026-09-21-91310000123456789X',
+    sellerName: '上海创源电子科技有限公司',
+    sellerTaxId: '91310000123456789X',
+    weekStart: '2026-09-21',
+    weekEnd: '2026-09-27',
+    totalAmount: 1286.5,
+    qualificationApprovedCount: 3,
+    voucherProgress: '凭证已完成 3 / 3',
+    financeStatus: 'not_submitted',
+    reimbursementSummary: '提交财务后登记结果',
+    submitBlockedReason: '',
+    invoices: [
+      {
+        id: 101,
+        invoiceNumber: '031001900111',
+        totalAmount: 420,
+        qualificationStatus: '审核通过',
+        voucherStatus: '凭证已通过',
+        financeStatus: 'not_submitted',
+        reimbursementStatus: 'not_completed',
+      },
+      {
+        id: 102,
+        invoiceNumber: '031001900112',
+        totalAmount: 386.5,
+        qualificationStatus: '审核通过',
+        voucherStatus: '凭证已通过',
+        financeStatus: 'not_submitted',
+        reimbursementStatus: 'not_completed',
+      },
+      {
+        id: 103,
+        invoiceNumber: '031001900113',
+        totalAmount: 480,
+        qualificationStatus: '审核通过',
+        voucherStatus: '凭证已通过',
+        financeStatus: 'not_submitted',
+        reimbursementStatus: 'not_completed',
+      },
+    ],
+  },
+  {
+    id: '2026-09-21-91320000987654321M',
+    sellerName: '南京精工材料有限公司',
+    sellerTaxId: '91320000987654321M',
+    weekStart: '2026-09-21',
+    weekEnd: '2026-09-27',
+    totalAmount: 860,
+    qualificationApprovedCount: 1,
+    voucherProgress: '待补凭证 1 张',
+    financeStatus: 'not_submitted',
+    reimbursementSummary: '暂不可提交',
+    submitBlockedReason: '组内仍有 1 张发票待补凭证',
+    invoices: [
+      {
+        id: 104,
+        invoiceNumber: '031001900114',
+        totalAmount: 360,
+        qualificationStatus: '审核通过',
+        voucherStatus: '无需凭证',
+        financeStatus: 'not_submitted',
+        reimbursementStatus: 'not_completed',
+      },
+      {
+        id: 105,
+        invoiceNumber: '031001900115',
+        totalAmount: 500,
+        qualificationStatus: '待补凭证',
+        voucherStatus: '凭证待补齐',
+        financeStatus: 'not_submitted',
+        reimbursementStatus: 'not_completed',
+      },
+    ],
+  },
+  {
+    id: '2026-09-14-91310000123456789X',
+    sellerName: '上海创源电子科技有限公司',
+    sellerTaxId: '91310000123456789X',
+    weekStart: '2026-09-14',
+    weekEnd: '2026-09-20',
+    totalAmount: 780,
+    qualificationApprovedCount: 2,
+    voucherProgress: '无需补充凭证',
+    financeStatus: 'submitted',
+    reimbursementSummary: '报销成功 1 张 · 未完成 1 张',
+    submitBlockedReason: '',
+    invoices: [
+      {
+        id: 96,
+        invoiceNumber: '031001900106',
+        totalAmount: 350,
+        qualificationStatus: '审核通过',
+        voucherStatus: '无需凭证',
+        financeStatus: 'submitted',
+        reimbursementStatus: 'success',
+      },
+      {
+        id: 97,
+        invoiceNumber: '031001900107',
+        totalAmount: 430,
+        qualificationStatus: '审核通过',
+        voucherStatus: '无需凭证',
+        financeStatus: 'submitted',
+        reimbursementStatus: 'not_completed',
+      },
+    ],
+  },
+  {
+    id: '2026-09-14-91440000333322221P',
+    sellerName: '深圳市联信五金有限公司',
+    sellerTaxId: '91440000333322221P',
+    weekStart: '2026-09-14',
+    weekEnd: '2026-09-20',
+    totalAmount: 640,
+    qualificationApprovedCount: 2,
+    voucherProgress: '无需补充凭证',
+    financeStatus: 'submitted',
+    reimbursementSummary: '报销失败 1 张 · 成功 1 张',
+    submitBlockedReason: '',
+    invoices: [
+      {
+        id: 94,
+        invoiceNumber: '031001900104',
+        totalAmount: 260,
+        qualificationStatus: '审核通过',
+        voucherStatus: '无需凭证',
+        financeStatus: 'submitted',
+        reimbursementStatus: 'failed',
+      },
+      {
+        id: 95,
+        invoiceNumber: '031001900105',
+        totalAmount: 380,
+        qualificationStatus: '审核通过',
+        voucherStatus: '无需凭证',
+        financeStatus: 'submitted',
+        reimbursementStatus: 'success',
+      },
+    ],
+  },
+])
+
+const weekOptions = computed(() => {
+  const values = [...new Set(groups.value.map((group) => group.weekStart))]
+
+  return values.sort((left, right) => right.localeCompare(left))
+})
+
+const filteredGroups = computed(() => {
+  const keyword = sellerFilter.value.trim().toLowerCase()
+
+  return groups.value.filter((group) => {
+    const matchesTab = group.financeStatus === activeTab.value
+    const matchesWeek = weekFilter.value === 'all'
+      || group.weekStart === weekFilter.value
+    const matchesSeller = !keyword
+      || group.sellerName.toLowerCase().includes(keyword)
+      || group.sellerTaxId.toLowerCase().includes(keyword)
+
+    return matchesTab && matchesWeek && matchesSeller
+  })
+})
+
+const pendingGroupCount = computed(() => {
+  return groups.value.filter((group) => group.financeStatus === 'not_submitted').length
+})
+
+const submittedGroupCount = computed(() => {
+  return groups.value.filter((group) => group.financeStatus === 'submitted').length
+})
+
+function formatAmount(amount: number): string {
+  return `¥${amount.toFixed(2)}`
+}
+
+function getWeekLabel(group: FinanceWeekGroup): string {
+  return `${group.weekStart} 至 ${group.weekEnd}`
+}
+
+function getFinanceStatusLabel(status: FinanceStatus): string {
+  return status === 'submitted' ? '已提交财务' : '待提交财务'
+}
+
+function getFinanceStatusType(status: FinanceStatus): 'success' | 'warning' {
+  return status === 'submitted' ? 'success' : 'warning'
+}
+
+function getReimbursementStatusLabel(status: ReimbursementStatus): string {
+  const labels: Record<ReimbursementStatus, string> = {
+    not_completed: '未完成',
+    success: '报销成功',
+    failed: '报销失败',
+  }
+
+  return labels[status]
+}
+
+function getReimbursementStatusType(
+  status: ReimbursementStatus,
+): 'info' | 'success' | 'danger' {
+  if (status === 'success') {
+    return 'success'
+  }
+
+  if (status === 'failed') {
+    return 'danger'
+  }
+
+  return 'info'
+}
+
+function toggleGroup(groupId: string) {
+  const index = expandedGroupIds.value.indexOf(groupId)
+
+  if (index === -1) {
+    expandedGroupIds.value.push(groupId)
+    return
+  }
+
+  expandedGroupIds.value.splice(index, 1)
+}
+
+function isGroupExpanded(groupId: string): boolean {
+  return expandedGroupIds.value.includes(groupId)
+}
+
+function handleSubmitFinance(group: FinanceWeekGroup) {
+  ElMessage.info(`静态演示：将提交 ${group.sellerName} ${getWeekLabel(group)} 的财务组`)
+}
+
+function handleReimbursement(invoice: ProgressInvoice) {
+  ElMessage.info(`静态演示：将登记发票 ${invoice.invoiceNumber} 的最终报销结果`)
+}
+
+function goToInvoiceDetail(invoice: ProgressInvoice) {
+  router.push({
+    name: 'invoice-detail',
+    params: {
+      invoiceId: invoice.id,
+    },
+  })
+}
+</script>
+
 <template>
-  <div>报销进度</div>
+  <section class="progress-page">
+    <div class="page-heading">
+      <div>
+        <p class="eyebrow">REIMBURSEMENT PROGRESS</p>
+        <h1>报销进度</h1>
+        <p class="subtitle">按销售方和自然周汇总财务提交与最终报销处理进度。</p>
+      </div>
+
+      <el-tag type="info" effect="plain">当前为静态布局演示</el-tag>
+    </div>
+
+    <div class="summary-grid">
+      <div class="summary-card pending">
+        <span>待提交财务组</span>
+        <strong>{{ pendingGroupCount }}</strong>
+        <small>等待整周审核与凭证核验完成</small>
+      </div>
+
+      <div class="summary-card submitted">
+        <span>已提交财务组</span>
+        <strong>{{ submittedGroupCount }}</strong>
+        <small>可继续登记单张发票报销结果</small>
+      </div>
+    </div>
+
+    <el-card class="filter-card" shadow="never">
+      <div class="filter-heading">
+        <div>
+          <strong>财务处理范围</strong>
+          <span>按销售方与自然周查看发票组</span>
+        </div>
+
+        <el-radio-group v-model="activeTab">
+          <el-radio-button value="not_submitted">待提交财务</el-radio-button>
+          <el-radio-button value="submitted">已提交财务</el-radio-button>
+        </el-radio-group>
+      </div>
+
+      <div class="filter-grid">
+        <el-select v-model="weekFilter" aria-label="自然周筛选">
+          <el-option label="全部自然周" value="all" />
+          <el-option
+            v-for="weekStart in weekOptions"
+            :key="weekStart"
+            :label="`${weekStart} 起`"
+            :value="weekStart"
+          />
+        </el-select>
+
+        <el-input
+          v-model="sellerFilter"
+          clearable
+          placeholder="搜索销售方名称或税号"
+        />
+      </div>
+    </el-card>
+
+    <div class="group-list-heading">
+      <div>
+        <h2>{{ activeTab === 'not_submitted' ? '待提交财务组' : '已提交财务组' }}</h2>
+        <span>当前显示 {{ filteredGroups.length }} 个自然周财务组</span>
+      </div>
+      <p>财务提交为组级操作，最终报销结果为发票级操作。</p>
+    </div>
+
+    <el-empty
+      v-if="filteredGroups.length === 0"
+      description="当前筛选条件下暂无财务组"
+    />
+
+    <div v-else class="group-list">
+      <el-card
+        v-for="group in filteredGroups"
+        :key="group.id"
+        class="finance-group-card"
+        shadow="never"
+      >
+        <div class="group-header">
+          <div class="group-identity">
+            <div class="group-title-row">
+              <h3>{{ group.sellerName }}</h3>
+              <el-tag :type="getFinanceStatusType(group.financeStatus)" effect="light">
+                {{ getFinanceStatusLabel(group.financeStatus) }}
+              </el-tag>
+            </div>
+            <span>纳税人识别号：{{ group.sellerTaxId }}</span>
+          </div>
+
+          <div class="group-actions">
+            <el-button link type="primary" @click="toggleGroup(group.id)">
+              {{ isGroupExpanded(group.id) ? '收起组内发票' : '查看组内发票' }}
+            </el-button>
+            <el-button
+              v-if="group.financeStatus === 'not_submitted'"
+              type="primary"
+              :disabled="Boolean(group.submitBlockedReason)"
+              @click="handleSubmitFinance(group)"
+            >
+              提交本周财务
+            </el-button>
+          </div>
+        </div>
+
+        <div class="group-metrics">
+          <div>
+            <span>自然周</span>
+            <strong>{{ getWeekLabel(group) }}</strong>
+          </div>
+          <div>
+            <span>有效累计金额</span>
+            <strong class="amount">{{ formatAmount(group.totalAmount) }}</strong>
+          </div>
+          <div>
+            <span>审核通过发票</span>
+            <strong>{{ group.qualificationApprovedCount }} 张</strong>
+          </div>
+          <div>
+            <span>凭证进度</span>
+            <strong>{{ group.voucherProgress }}</strong>
+          </div>
+          <div>
+            <span>报销进度</span>
+            <strong>{{ group.reimbursementSummary }}</strong>
+          </div>
+        </div>
+
+        <el-alert
+          v-if="group.submitBlockedReason"
+          class="group-alert"
+          :title="group.submitBlockedReason"
+          type="warning"
+          :closable="false"
+          show-icon
+        />
+
+        <div v-if="isGroupExpanded(group.id)" class="invoice-section">
+          <div class="invoice-section-heading">
+            <div>
+              <strong>组内发票</strong>
+              <span>审核不通过或已取消的发票不会计入有效累计金额。</span>
+            </div>
+          </div>
+
+          <el-table :data="group.invoices" class="invoice-table" size="small">
+            <el-table-column prop="invoiceNumber" label="发票号码" min-width="150" />
+            <el-table-column label="价税合计" width="130" align="right">
+              <template #default="{ row }">{{ formatAmount(row.totalAmount) }}</template>
+            </el-table-column>
+            <el-table-column prop="qualificationStatus" label="资质审核" width="120" />
+            <el-table-column prop="voucherStatus" label="凭证状态" min-width="120" />
+            <el-table-column label="最终报销" width="120">
+              <template #default="{ row }">
+                <el-tag :type="getReimbursementStatusType(row.reimbursementStatus)" effect="plain">
+                  {{ getReimbursementStatusLabel(row.reimbursementStatus) }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="190" fixed="right">
+              <template #default="{ row }">
+                <el-button link type="primary" @click="goToInvoiceDetail(row)">查看详情</el-button>
+                <el-button
+                  v-if="row.financeStatus === 'submitted' && row.reimbursementStatus === 'not_completed'"
+                  link
+                  type="primary"
+                  @click="handleReimbursement(row)"
+                >
+                  登记结果
+                </el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+      </el-card>
+    </div>
+  </section>
 </template>
+
+<style scoped>
+.progress-page {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding-bottom: 40px;
+  color: #0f172a;
+}
+
+.page-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.page-heading h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.subtitle {
+  margin: 8px 0 0;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.summary-card {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 18px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.summary-card span,
+.summary-card small {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.summary-card strong {
+  font-size: 28px;
+}
+
+.summary-card.pending strong {
+  color: #d97706;
+}
+
+.summary-card.submitted strong {
+  color: #16a34a;
+}
+
+.filter-card,
+.finance-group-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+}
+
+.filter-card {
+  margin-bottom: 24px;
+}
+
+.filter-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.filter-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.filter-heading strong {
+  font-size: 15px;
+}
+
+.filter-heading span {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.filter-grid {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.7fr) minmax(260px, 1fr);
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.group-list-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 14px;
+}
+
+.group-list-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.group-list-heading h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.group-list-heading span,
+.group-list-heading p {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.group-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.group-identity {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.group-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.group-title-row h3 {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 17px;
+}
+
+.group-identity > span {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.group-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.group-metrics {
+  display: grid;
+  grid-template-columns: 1.1fr repeat(4, 1fr);
+  gap: 12px;
+  margin-top: 20px;
+  padding: 14px;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.group-metrics > div {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.group-metrics span {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.group-metrics strong {
+  overflow: hidden;
+  color: #334155;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.group-metrics .amount {
+  color: #2563eb;
+  font-size: 16px;
+}
+
+.group-alert {
+  margin-top: 14px;
+}
+
+.invoice-section {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.invoice-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.invoice-section-heading > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.invoice-section-heading strong {
+  font-size: 14px;
+}
+
+.invoice-section-heading span {
+  color: #94a3b8;
+  font-size: 12px;
+}
+
+.invoice-table {
+  width: 100%;
+}
+
+@media (max-width: 980px) {
+  .group-metrics {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 680px) {
+  .page-heading,
+  .filter-heading,
+  .group-list-heading,
+  .group-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .summary-grid,
+  .filter-grid,
+  .group-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .group-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .group-actions .el-button:last-child {
+    flex: 1;
+  }
+}
+</style>
