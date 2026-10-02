@@ -3,6 +3,7 @@ const dotenv = require('dotenv')
 
 dotenv.config({ path: path.resolve(__dirname, '../../.env') })
 
+// 把 .env 里的配置读出来，给腾讯云 OCR 和 Agnes AI 用
 function getExtractionConfig() {
   const envValue = (name) => (process.env[name] || '').trim()
   return {

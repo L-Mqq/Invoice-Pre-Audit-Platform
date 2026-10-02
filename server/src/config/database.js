@@ -7,10 +7,12 @@ dotenv.config({ path: path.resolve(process.cwd(), '.env') })
 const requiredConfig = ['DB_NAME', 'DB_USER']
 const missingConfig = requiredConfig.filter((key) => !process.env[key])
 
+// 检查缺失配置
 if (missingConfig.length > 0) {
   throw new Error(`Missing database configuration: ${missingConfig.join(', ')}`)
 }
 
+// 创建连接池
 const pool = mysql.createPool({
   host: process.env.DB_HOST || '127.0.0.1',
   port: Number(process.env.DB_PORT || 3306),
@@ -26,6 +28,7 @@ const pool = mysql.createPool({
   keepAliveInitialDelay: 0,
 })
 
+// 测试连接
 async function testConnection() {
   const connection = await pool.getConnection()
 
@@ -36,6 +39,7 @@ async function testConnection() {
   }
 }
 
+// 关闭连接池
 async function closePool() {
   await pool.end()
 }

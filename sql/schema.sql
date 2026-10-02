@@ -99,6 +99,7 @@ CREATE TABLE IF NOT EXISTS invoices (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后更新时间',
   PRIMARY KEY (id),
   KEY idx_invoices_seller_week (seller_tax_id, cumulative_week_start),
+  KEY idx_invoices_seller_submitted_qualification (seller_tax_id, submitted_at, qualification_status),
   KEY idx_invoices_qualification_status (qualification_status),
   KEY idx_invoices_submitted_at (submitted_at),
   KEY idx_invoices_source_batch (source_batch_id),
