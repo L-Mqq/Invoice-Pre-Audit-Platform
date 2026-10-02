@@ -127,6 +127,69 @@ async function findPendingWeeklyVoucherProgress({
   return rows
 }
 
+// 查询指定销售方和自然周内的发票，并取得凭证状态判断所需的原始信息。
+async function findInvoicesForFinanceWeekDetail({
+  connection = pool,
+  sellerTaxId,
+  cumulativeWeekStart,
+}) {
+  const [rows] = await connection.execute(
+    `SELECT
+       i.id,
+       i.invoice_number,
+       i.total_amount,
+       i.submitted_at,
+       i.qualification_status,
+       i.qualification_reason,
+       i.finance_status,
+       i.reimbursement_status,
+       pending_requirement_invoice.voucher_status AS weekly_voucher_status,
+       latest_voucher_group.review_status AS latest_voucher_review_status,
+       EXISTS(
+         SELECT 1
+         FROM voucher_groups approved_group
+         JOIN vouchers approved_voucher
+           ON approved_voucher.voucher_group_id = approved_group.id
+         WHERE approved_group.invoice_id = i.id
+           AND approved_group.review_status = 'approved'
+         GROUP BY approved_group.id
+         HAVING COUNT(DISTINCT approved_voucher.voucher_type) = 2
+       ) AS has_approved_complete_voucher_group
+     FROM invoices i
+     LEFT JOIN weekly_voucher_requirement_invoices pending_requirement_invoice
+       ON pending_requirement_invoice.invoice_id = i.id
+       AND pending_requirement_invoice.requirement_id = (
+         SELECT pending_requirement.id
+         FROM weekly_voucher_requirements pending_requirement
+         WHERE pending_requirement.seller_tax_id = ?
+           AND pending_requirement.cumulative_week_start = ?
+           AND pending_requirement.status = 'pending'
+         LIMIT 1
+       )
+     LEFT JOIN voucher_groups latest_voucher_group
+       ON latest_voucher_group.id = (
+         SELECT latest_group.id
+         FROM voucher_groups latest_group
+         WHERE latest_group.invoice_id = i.id
+         ORDER BY latest_group.id DESC
+         LIMIT 1
+       )
+     WHERE i.seller_tax_id = ?
+       AND i.submitted_at >= ?
+       AND i.submitted_at < DATE_ADD(?, INTERVAL 7 DAY)
+     ORDER BY i.submitted_at ASC, i.id ASC`,
+    [
+      sellerTaxId,
+      cumulativeWeekStart,
+      sellerTaxId,
+      cumulativeWeekStart,
+      cumulativeWeekStart,
+    ],
+  )
+
+  return rows
+}
+
 // 事务内将同一财务提交组的所有合格发票标记为已提交财务。
 async function markInvoicesAsFinanceSubmitted({
   connection = pool,
@@ -279,6 +342,7 @@ module.exports = {
   findPendingWeeklyVoucherRequirement,
   findInvoicesForFinanceWeekList,
   findPendingWeeklyVoucherProgress,
+  findInvoicesForFinanceWeekDetail,
   markInvoicesAsFinanceSubmitted,
   createFinanceSubmissionLogs,
   findInvoiceForReimbursementUpdate,

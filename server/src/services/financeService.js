@@ -322,6 +322,79 @@ function serializeFinanceWeekGroup({
   }
 }
 
+// 获取凭证状态
+function getVoucherStatus(invoice) {
+  if (invoice.weekly_voucher_status === 'pending') {
+    return {
+      code: 'pending',
+      label: '周累计凭证待补齐',
+    }
+  }
+
+  if (
+    invoice.weekly_voucher_status === 'approved'
+    || Number(invoice.has_approved_complete_voucher_group) === 1
+  ) {
+    return {
+      code: 'approved',
+      label: '凭证已通过',
+    }
+  }
+
+  if (invoice.latest_voucher_review_status === 'rejected') {
+    return {
+      code: 'rejected',
+      label: '凭证已驳回',
+    }
+  }
+
+  if (invoice.qualification_status === 'pending_voucher') {
+    return {
+      code: 'pending',
+      label: '凭证待补齐',
+    }
+  }
+
+  return {
+    code: 'not_required',
+    label: '无需凭证',
+  }
+}
+
+// 查询某个销售方在某个自然周内已提交审核的发票列表
+async function getFinanceWeekInvoices({
+  sellerTaxId,
+  cumulativeWeekStart,
+}) {
+  const normalizedSellerTaxId = parseSellerTaxId(sellerTaxId)
+  const normalizedWeekStart = parseCumulativeWeekStart(cumulativeWeekStart)
+  const invoices = await financeRepository.findInvoicesForFinanceWeekDetail({
+    sellerTaxId: normalizedSellerTaxId,
+    cumulativeWeekStart: normalizedWeekStart,
+  })
+
+  if (invoices.length === 0) {
+    throw createHttpError(404, '该销售方在此自然周没有已提交审核的发票')
+  }
+
+  return {
+    sellerTaxId: normalizedSellerTaxId,
+    weekStart: normalizedWeekStart,
+    weekEnd: getWeekEnd(normalizedWeekStart),
+    items: invoices.map((invoice) => ({
+      id: invoice.id,
+      invoiceNumber: invoice.invoice_number,
+      totalAmount: Number(invoice.total_amount),
+      submittedAt: invoice.submitted_at,
+      qualificationStatus: invoice.qualification_status,
+      qualificationReason: invoice.qualification_reason,
+      voucherStatus: getVoucherStatus(invoice),
+      financeStatus: invoice.finance_status,
+      reimbursementStatus: invoice.reimbursement_status,
+    })),
+  }
+}
+
 // 报销进度页的核心数据
 async function listFinanceWeeks({
   financeStatus,
@@ -574,6 +647,7 @@ async function updateInvoiceReimbursementStatus({
 
 module.exports = {
   listFinanceWeeks,
+  getFinanceWeekInvoices,
   submitFinanceWeek,
   updateInvoiceReimbursementStatus,
 }
