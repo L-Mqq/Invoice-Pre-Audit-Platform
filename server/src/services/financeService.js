@@ -6,6 +6,10 @@ const BLOCKING_QUALIFICATION_STATUSES = new Set([
   'pending_voucher',
   'pending_manual',
 ])
+const ALLOWED_REIMBURSEMENT_STATUSES = new Set([
+  'success',
+  'failed',
+])
 
 // 创建带 HTTP 状态码的错误
 function createHttpError(statusCode, message) {
@@ -24,6 +28,28 @@ function parseOperatorId(value) {
   }
 
   return parsed
+}
+
+function parseInvoiceId(value) {
+  if (typeof value !== 'string' || !/^\d+$/.test(value)) {
+    throw createHttpError(400, '发票 ID 无效')
+  }
+
+  const invoiceId = Number(value)
+
+  if (!Number.isSafeInteger(invoiceId) || invoiceId <= 0) {
+    throw createHttpError(400, '发票 ID 无效')
+  }
+
+  return invoiceId
+}
+
+function parseReimbursementStatus(value) {
+  if (!ALLOWED_REIMBURSEMENT_STATUSES.has(value)) {
+    throw createHttpError(400, '最终报销状态仅可更新为 success 或 failed')
+  }
+
+  return value
 }
 
 // 校验销售方税号
@@ -102,6 +128,7 @@ function formatInvoiceNumbers(invoices) {
     .join('、')
 }
 
+// 提交财务数据
 async function submitFinanceWeek({
   sellerTaxId,
   cumulativeWeekStart,
@@ -121,6 +148,7 @@ async function submitFinanceWeek({
   try {
     await connection.beginTransaction()
 
+    // 查询当前销售方加锁
     const invoices = await financeRepository.findInvoicesForWeekSubmission({
       connection,
       sellerTaxId: normalizedSellerTaxId,
@@ -131,6 +159,7 @@ async function submitFinanceWeek({
       throw createHttpError(404, '该销售方在此自然周没有已提交审核的发票')
     }
 
+    // 寻找发票中属于阻塞状态的发票，如果有则不能提交财务
     const blockingInvoices = invoices.filter((invoice) => {
       return BLOCKING_QUALIFICATION_STATUSES.has(invoice.qualification_status)
     })
@@ -222,6 +251,73 @@ async function submitFinanceWeek({
   }
 }
 
+// 更新最终的报销状态
+async function updateInvoiceReimbursementStatus({
+  invoiceId,
+  reimbursementStatus,
+  operatorId,
+}) {
+  const normalizedInvoiceId = parseInvoiceId(invoiceId)
+  const normalizedReimbursementStatus = parseReimbursementStatus(reimbursementStatus)
+  const normalizedOperatorId = parseOperatorId(operatorId)
+  const connection = await pool.getConnection()
+
+  try {
+    await connection.beginTransaction()
+
+    const invoice = await financeRepository.findInvoiceForReimbursementUpdate({
+      connection,
+      invoiceId: normalizedInvoiceId,
+    })
+
+    if (!invoice) {
+      throw createHttpError(404, '发票不存在')
+    }
+
+    if (invoice.qualification_status !== 'approved') {
+      throw createHttpError(409, '仅审核通过的发票可以更新最终报销状态')
+    }
+
+    if (invoice.finance_status !== 'submitted') {
+      throw createHttpError(409, '请先提交财务，再更新最终报销状态')
+    }
+
+    if (invoice.reimbursement_status !== 'not_completed') {
+      throw createHttpError(409, '该发票已有最终报销结果，不能重复更新')
+    }
+
+    const affectedRows = await financeRepository.updateReimbursementStatus({
+      connection,
+      invoiceId: normalizedInvoiceId,
+      reimbursementStatus: normalizedReimbursementStatus,
+    })
+
+    if (affectedRows !== 1) {
+      throw createHttpError(409, '发票状态已变化，请刷新后重试')
+    }
+
+    await financeRepository.createReimbursementStatusLog({
+      connection,
+      operatorId: normalizedOperatorId,
+      invoice,
+      reimbursementStatus: normalizedReimbursementStatus,
+    })
+
+    await connection.commit()
+
+    return {
+      id: normalizedInvoiceId,
+      reimbursementStatus: normalizedReimbursementStatus,
+    }
+  } catch (error) {
+    await connection.rollback()
+    throw error
+  } finally {
+    connection.release()
+  }
+}
+
 module.exports = {
   submitFinanceWeek,
+  updateInvoiceReimbursementStatus,
 }

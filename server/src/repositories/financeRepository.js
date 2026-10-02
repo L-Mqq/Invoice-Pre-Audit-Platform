@@ -122,9 +122,93 @@ async function createFinanceSubmissionLogs({
   }
 }
 
+// 更新最终报销状态前锁定发票，避免重复处理同一报销结果。
+async function findInvoiceForReimbursementUpdate({
+  connection = pool,
+  invoiceId,
+}) {
+  const [rows] = await connection.execute(
+    `SELECT
+       id,
+       invoice_number,
+       qualification_status,
+       finance_status,
+       reimbursement_status
+     FROM invoices
+     WHERE id = ?
+     FOR UPDATE`,
+    [invoiceId],
+  )
+
+  return rows[0] || null
+}
+
+// 仅允许处于未完成状态的发票写入最终报销结果。
+async function updateReimbursementStatus({
+  connection = pool,
+  invoiceId,
+  reimbursementStatus,
+}) {
+  const [result] = await connection.execute(
+    `UPDATE invoices
+     SET reimbursement_status = ?
+     WHERE id = ?
+       AND qualification_status = 'approved'
+       AND finance_status = 'submitted'
+       AND reimbursement_status = 'not_completed'`,
+    [
+      reimbursementStatus,
+      invoiceId,
+    ],
+  )
+
+  return result.affectedRows
+}
+
+// 最终报销结果变更必须单独保留可追溯日志。
+async function createReimbursementStatusLog({
+  connection = pool,
+  operatorId,
+  invoice,
+  reimbursementStatus,
+}) {
+  const beforeData = {
+    qualificationStatus: invoice.qualification_status,
+    financeStatus: invoice.finance_status,
+    reimbursementStatus: invoice.reimbursement_status,
+  }
+  const afterData = {
+    qualificationStatus: invoice.qualification_status,
+    financeStatus: invoice.finance_status,
+    reimbursementStatus,
+  }
+
+  await connection.execute(
+    `INSERT INTO operation_logs
+      (
+        operator_id,
+        operation_type,
+        resource_type,
+        resource_id,
+        before_data,
+        after_data
+      )
+     VALUES (?, 'update_reimbursement_status', 'invoice', ?, ?, ?)`,
+    [
+      operatorId,
+      invoice.id,
+      JSON.stringify(beforeData),
+      JSON.stringify(afterData),
+    ],
+  )
+}
+
 module.exports = {
   findInvoicesForWeekSubmission,
   findPendingWeeklyVoucherRequirement,
   markInvoicesAsFinanceSubmitted,
   createFinanceSubmissionLogs,
+  findInvoiceForReimbursementUpdate,
+  updateReimbursementStatus,
+  createReimbursementStatusLog,
 }
