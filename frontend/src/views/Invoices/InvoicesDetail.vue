@@ -3,7 +3,10 @@ import {
   ref,
 } from 'vue'
 import { ElMessage } from 'element-plus'
-import { useRouter } from 'vue-router'
+import {
+  useRoute,
+  useRouter,
+} from 'vue-router'
 import type { InvoiceDetailItem } from '../../apis/invoices'
 import type { InvoiceQualificationAction } from '../../apis/invoiceReview'
 import type {
@@ -29,6 +32,7 @@ import { useVoucherReview } from './composables/useVoucherReview'
 import { useVoucherSubmission } from './composables/useVoucherSubmission'
 
 const router = useRouter()
+const route = useRoute()
 const qualificationReviewVisible = ref(false)
 const voucherDialogVisible = ref(false)
 const voucherReviewDialogVisible = ref(false)
@@ -164,9 +168,28 @@ function canReviewCategory(item: InvoiceDetailItem): boolean {
 }
 
 function goBack() {
+  if (route.query.from === 'reimbursement-progress') {
+    router.push({
+      name: 'reimbursement-progress',
+      query: {
+        weekStart: route.query.weekStart,
+        sellerTaxId: route.query.sellerTaxId,
+      },
+    })
+    return
+  }
+
   router.push({
     name: 'invoice-list',
   })
+}
+
+function getBackLabel(): string {
+  if (route.query.from === 'reimbursement-progress') {
+    return '← 返回报销进度'
+  }
+
+  return '← 返回发票列表'
 }
 
 async function openQualificationReview() {
@@ -220,7 +243,7 @@ async function handleQualificationReview(
           type="primary"
           @click="goBack"
         >
-          ← 返回发票列表
+          {{ getBackLabel() }}
         </el-button>
         <p class="eyebrow">INVOICE DETAIL</p>
         <h1>发票详情</h1>

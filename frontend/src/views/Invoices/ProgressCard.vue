@@ -15,6 +15,7 @@ import {
   getReimbursementStatusLabel,
 } from '../../utils/status'
 import {
+  useRoute,
   useRouter,
 } from 'vue-router'
 import {
@@ -25,6 +26,7 @@ const activeTab = ref<FinanceStatus>('not_submitted')
 const weekFilter = ref('all')
 const sellerFilter = ref('')
 const expandedGroupIds = ref<string[]>([])
+const route = useRoute()
 const router = useRouter()
 
 const {
@@ -147,16 +149,56 @@ function getReimbursementStatusType(
   return 'info'
 }
 
-function goToInvoiceDetail(invoice: FinanceWeekInvoice) {
+function goToInvoiceDetail(
+  invoice: FinanceWeekInvoice,
+  group: FinanceWeekGroup,
+) {
   router.push({
     name: 'invoice-detail',
     params: {
       invoiceId: invoice.id,
     },
+    query: {
+      from: 'reimbursement-progress',
+      weekStart: group.weekStart,
+      sellerTaxId: group.sellerTaxId,
+    },
   })
 }
 
-onMounted(loadFinanceWeeks)
+async function restoreFinanceGroupFromRoute() {
+  const weekStart = typeof route.query.weekStart === 'string'
+    ? route.query.weekStart
+    : ''
+  const sellerTaxId = typeof route.query.sellerTaxId === 'string'
+    ? route.query.sellerTaxId
+    : ''
+
+  if (!weekStart || !sellerTaxId) {
+    return
+  }
+
+  const group = groups.value.find((candidate) => {
+    return candidate.weekStart === weekStart
+      && candidate.sellerTaxId === sellerTaxId
+  })
+
+  if (!group) {
+    return
+  }
+
+  activeTab.value = group.financeStatus
+  weekFilter.value = weekStart
+  sellerFilter.value = sellerTaxId
+  expandedGroupIds.value = [getGroupKey(group)]
+
+  await loadGroupInvoices(group)
+}
+
+onMounted(async () => {
+  await loadFinanceWeeks()
+  await restoreFinanceGroupFromRoute()
+})
 </script>
 
 <template>
@@ -374,7 +416,7 @@ onMounted(loadFinanceWeeks)
             </el-table-column>
             <el-table-column label="操作" width="100" fixed="right">
               <template #default="{ row }">
-                <el-button link type="primary" @click="goToInvoiceDetail(row)">
+                <el-button link type="primary" @click="goToInvoiceDetail(row, group)">
                   查看详情
                 </el-button>
               </template>
