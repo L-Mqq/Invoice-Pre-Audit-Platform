@@ -76,6 +76,19 @@ export interface InvoiceDetailFile {
   updatedAt: string
 }
 
+export type ManualProcessingType =
+  | 'data_completion'
+  | 'category_confirmation'
+
+export interface InvoiceDataIssue {
+  code: string
+  scope: 'invoice' | 'item'
+  field: string
+  itemIndex: number | null
+  itemId?: number | null
+  message: string
+}
+
 export interface InvoiceDetail {
   id: number
   invoiceNumber: string | null
@@ -93,6 +106,11 @@ export interface InvoiceDetail {
   sourceBatchId: string | null
   aiRawResult: unknown
   manualNote: string | null
+  completionRequired: boolean
+  dataIssues: InvoiceDataIssue[]
+  manualProcessingType: ManualProcessingType | null
+  canManualCompleteData: boolean
+  canConfirmCategory: boolean
   createdAt: string
   updatedAt: string
   items: InvoiceDetailItem[]

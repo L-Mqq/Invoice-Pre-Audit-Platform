@@ -1,5 +1,9 @@
 import axios from 'axios'
 import http from '../utils/http'
+import type {
+  InvoiceDataIssue,
+  ManualProcessingType,
+} from './invoices'
 
 export type CategoryReviewResult = '可以' | '存疑' | '不可以'
 
@@ -58,6 +62,39 @@ export interface InvoiceQualificationPreview {
   calculable: boolean
 }
 
+export interface ManualInvoiceData {
+  sellerName?: string | null
+  sellerTaxId?: string | null
+  invoiceDate?: string | null
+  totalAmount?: number
+}
+
+export interface ManualInvoiceItemData {
+  itemId?: number
+  itemName: string
+  quantity: number
+  unitPrice: number
+  lineAmount: number
+}
+
+export interface UpdateInvoiceManualDataPayload {
+  invoiceId: number
+  invoice?: ManualInvoiceData
+  items?: ManualInvoiceItemData[]
+  note: string
+}
+
+export interface UpdateInvoiceManualDataResponse {
+  id: number
+  qualificationStatus: string
+  qualificationReason: string
+  completionRequired: boolean
+  dataIssues: InvoiceDataIssue[]
+  manualProcessingType: ManualProcessingType | null
+  changedItemIds: number[]
+  createdItemIds: number[]
+}
+
 // 更新人工审核商品品类的结果
 export async function reviewItemCategory(
   payload: ReviewItemCategoryPayload,
@@ -79,6 +116,35 @@ export async function reviewItemCategory(
     if (axios.isAxiosError<{ message?: string }>(error)) {
       throw new Error(
         error.response?.data?.message || '人工确认商品品类失败',
+      )
+    }
+
+    throw error
+  }
+}
+
+// 保存管理员补全的发票基础信息和商品明细。
+export async function updateInvoiceManualData(
+  payload: UpdateInvoiceManualDataPayload,
+): Promise<UpdateInvoiceManualDataResponse> {
+  try {
+    const response = await http.patch<{
+      success: boolean
+      data: UpdateInvoiceManualDataResponse
+    }>(
+      `/invoice-review/invoices/${payload.invoiceId}/manual-data`,
+      {
+        invoice: payload.invoice,
+        items: payload.items,
+        note: payload.note,
+      },
+    )
+
+    return response.data.data
+  } catch (error: unknown) {
+    if (axios.isAxiosError<{ message?: string }>(error)) {
+      throw new Error(
+        error.response?.data?.message || '补全发票资料失败',
       )
     }
 
