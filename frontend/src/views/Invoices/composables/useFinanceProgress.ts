@@ -5,6 +5,7 @@ import {
 import {
   getFinanceWeekInvoices,
   getFinanceWeeks,
+  submitFinanceWeek,
   type FinanceWeekInvoice,
   type FinanceWeekGroup,
   type FinanceWeeksResponse,
@@ -25,6 +26,7 @@ export function useFinanceProgress() {
   const groupInvoiceLoading = ref<Record<string, boolean>>({})
   const loading = ref(false)
   const loadError = ref('')
+  const submittingGroupKey = ref('')
   const summary = ref<FinanceWeeksResponse['summary']>({
     pendingGroupCount: 0,
     submittedGroupCount: 0,
@@ -84,6 +86,33 @@ export function useFinanceProgress() {
     }
   }
 
+  async function submitFinanceGroup(group: FinanceWeekGroup) {
+    if (!group.canSubmitFinance) {
+      throw new Error(group.submitBlockedReason || '当前财务组暂不满足提交条件')
+    }
+
+    const groupKey = getGroupKey(group)
+
+    if (submittingGroupKey.value) {
+      throw new Error('已有财务组正在提交，请稍候')
+    }
+
+    submittingGroupKey.value = groupKey
+
+    try {
+      const result = await submitFinanceWeek({
+        sellerTaxId: group.sellerTaxId,
+        cumulativeWeekStart: group.weekStart,
+      })
+
+      await loadFinanceWeeks()
+
+      return result
+    } finally {
+      submittingGroupKey.value = ''
+    }
+  }
+
   return {
     groups,
     groupInvoiceDetails,
@@ -95,6 +124,8 @@ export function useFinanceProgress() {
     loading,
     loadFinanceWeeks,
     loadGroupInvoices,
+    submitFinanceGroup,
+    submittingGroupKey,
     summary,
   }
 }

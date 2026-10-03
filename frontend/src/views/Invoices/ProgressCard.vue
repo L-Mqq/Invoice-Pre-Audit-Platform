@@ -19,6 +19,10 @@ import {
   useRouter,
 } from 'vue-router'
 import {
+  ElMessage,
+  ElMessageBox,
+} from 'element-plus'
+import {
   useFinanceProgress,
 } from './composables/useFinanceProgress'
 
@@ -39,6 +43,8 @@ const {
   loading,
   loadFinanceWeeks,
   loadGroupInvoices,
+  submitFinanceGroup,
+  submittingGroupKey,
   summary,
 } = useFinanceProgress()
 
@@ -133,6 +139,44 @@ function getGroupInvoicesError(group: FinanceWeekGroup): string {
 
 function isGroupInvoicesLoading(group: FinanceWeekGroup): boolean {
   return Boolean(groupInvoiceLoading.value[getGroupKey(group)])
+}
+
+function isFinanceGroupSubmitting(group: FinanceWeekGroup): boolean {
+  return submittingGroupKey.value === getGroupKey(group)
+}
+
+async function handleSubmitFinance(group: FinanceWeekGroup) {
+  if (!group.canSubmitFinance || isFinanceGroupSubmitting(group)) {
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `将提交 ${group.sellerName} 在 ${getWeekLabel(group)} 的 ${group.approvedInvoiceCount} 张审核通过发票，累计 ${formatAmount(group.validCumulativeAmount)}。提交后将进入报销处理流程。`,
+      '确认提交本周财务',
+      {
+        confirmButtonText: '确认提交',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+  } catch {
+    return
+  }
+
+  try {
+    const result = await submitFinanceGroup(group)
+
+    ElMessage.success(
+      `已提交 ${result.invoiceCount} 张发票至财务，累计 ${formatAmount(result.cumulativeAmount)}`,
+    )
+  } catch (error) {
+    const message = error instanceof Error
+      ? error.message
+      : '提交财务失败，请稍后重试'
+
+    ElMessage.error(message)
+  }
 }
 
 function getReimbursementStatusType(
@@ -314,7 +358,12 @@ onMounted(async () => {
               :disabled="group.canSubmitFinance"
               :content="group.submitBlockedReason || ''"
             >
-              <el-button type="primary" disabled>
+              <el-button
+                type="primary"
+                :disabled="!group.canSubmitFinance || Boolean(submittingGroupKey)"
+                :loading="isFinanceGroupSubmitting(group)"
+                @click="handleSubmitFinance(group)"
+              >
                 提交本周财务
               </el-button>
             </el-tooltip>
