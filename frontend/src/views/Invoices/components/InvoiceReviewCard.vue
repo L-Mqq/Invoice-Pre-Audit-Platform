@@ -23,6 +23,8 @@ defineProps<{
 }>()
 
 const emit = defineEmits<{
+  manualComplete: []
+  confirmCategory: []
   submitReview: []
   enterReview: []
   submitVoucher: []
@@ -153,6 +155,26 @@ function getWeeklyVoucherRequirementDescription(
       show-icon
     />
 
+    <el-alert
+      v-if="invoice.canManualCompleteData"
+      class="manual-data-alert"
+      title="资料待补全"
+      type="warning"
+      :closable="false"
+      show-icon
+    >
+      <template #default>
+        <ul class="data-issue-list">
+          <li
+            v-for="issue in invoice.dataIssues"
+            :key="`${issue.scope}-${issue.itemId || issue.itemIndex}-${issue.field}-${issue.code}`"
+          >
+            {{ issue.message }}
+          </li>
+        </ul>
+      </template>
+    </el-alert>
+
     <div
       v-if="showVoucherSection"
       class="voucher-actions"
@@ -198,7 +220,15 @@ function getWeeklyVoucherRequirementDescription(
     </div>
 
     <div class="review-actions">
-      <div v-if="canSubmitReview">
+      <div v-if="invoice.canManualCompleteData">
+        <strong>资料待补全</strong>
+        <span>请先补全发票基础信息或商品明细，再继续审核流程。</span>
+      </div>
+      <div v-else-if="invoice.canConfirmCategory">
+        <strong>待完成商品确认</strong>
+        <span>存在存疑或未确认商品，请查看判断依据后逐项人工确认。</span>
+      </div>
+      <div v-else-if="canSubmitReview">
         <strong>提交审核</strong>
         <span>确认商品品类结果后，提交整张发票进入审核队列。</span>
       </div>
@@ -226,7 +256,21 @@ function getWeeklyVoucherRequirementDescription(
         <span>请根据当前发票状态继续处理。</span>
       </div>
       <el-button
-        v-if="canSubmitReview"
+        v-if="invoice.canManualCompleteData"
+        type="primary"
+        @click="emit('manualComplete')"
+      >
+        补全资料
+      </el-button>
+      <el-button
+        v-else-if="invoice.canConfirmCategory"
+        type="primary"
+        @click="emit('confirmCategory')"
+      >
+        人工确认品类
+      </el-button>
+      <el-button
+        v-else-if="canSubmitReview"
         type="primary"
         :loading="submitReviewLoading"
         @click="emit('submitReview')"
@@ -327,6 +371,19 @@ function getWeeklyVoucherRequirementDescription(
 
 .weekly-voucher-requirement {
   margin-top: 16px;
+}
+
+.manual-data-alert {
+  margin-top: 16px;
+}
+
+.data-issue-list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+.data-issue-list li {
+  margin: 4px 0;
 }
 
 .voucher-status {

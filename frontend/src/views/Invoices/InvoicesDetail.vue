@@ -14,6 +14,7 @@ import type {
 } from '../../apis/voucher'
 import InvoiceBasicInfo from './components/InvoiceBasicInfo.vue'
 import InvoiceItemsTable from './components/InvoiceItemsTable.vue'
+import InvoiceManualDataDialog from './components/InvoiceManualDataDialog.vue'
 import InvoicePreviewCard from './components/InvoicePreviewCard.vue'
 import InvoiceQualificationReviewDialog from './components/InvoiceQualificationReviewDialog.vue'
 import InvoiceReviewCard from './components/InvoiceReviewCard.vue'
@@ -23,6 +24,7 @@ import InvoiceVoucherReviewDialog from './components/InvoiceVoucherReviewDialog.
 import { useInvoiceCategoryReview } from './composables/useInvoiceCategoryReview'
 import { useInvoiceDetail } from './composables/useInvoiceDetail'
 import { useInvoiceFileActions } from './composables/useInvoiceFileActions'
+import { useInvoiceManualData } from './composables/useInvoiceManualData'
 import { useInvoiceQualificationPreview } from './composables/useInvoiceQualificationPreview'
 import { useInvoiceQualificationReview } from './composables/useInvoiceQualificationReview'
 import { useInvoiceReviewSubmission } from './composables/useInvoiceReviewSubmission'
@@ -46,6 +48,16 @@ const {
   selectedFile,
   selectedFileId,
 } = useInvoiceDetail()
+
+const {
+  manualDataDialogVisible,
+  manualDataSubmitting,
+  openManualDataDialog,
+  submitManualData,
+} = useInvoiceManualData({
+  invoiceDetail,
+  loadInvoiceDetail,
+})
 
 const {
   downloadSelectedFile,
@@ -160,11 +172,27 @@ function getManualCategoryReason(item: InvoiceDetailItem): string {
 }
 
 function canReviewCategory(item: InvoiceDetailItem): boolean {
-  if (!isCategoryEditable.value) {
+  if (
+    !isCategoryEditable.value
+    || !invoiceDetail.value?.canConfirmCategory
+  ) {
     return false
   }
 
   return !item.finalCategoryResult || item.finalCategoryResult === '存疑'
+}
+
+function openFirstCategoryConfirmation() {
+  const item = invoiceDetail.value?.items.find((candidate) => {
+    return canReviewCategory(candidate)
+  })
+
+  if (!item) {
+    ElMessage.warning('当前没有可人工确认的商品品类')
+    return
+  }
+
+  openEvidenceDialog(item)
 }
 
 function goBack() {
@@ -324,6 +352,8 @@ async function handleQualificationReview(
             :voucher-groups-error="voucherGroupsError"
             @submit-review="submitInvoiceReview"
             @enter-review="openQualificationReview"
+            @manual-complete="openManualDataDialog"
+            @confirm-category="openFirstCategoryConfirmation"
             @submit-voucher="handleSubmitVoucher"
             @view-voucher="handleViewVoucher"
           />
@@ -372,6 +402,14 @@ async function handleQualificationReview(
       :reviewing="voucherReviewSubmitting"
       @preview-file="previewVoucherFileById"
       @review="submitVoucherReview"
+    />
+
+    <InvoiceManualDataDialog
+      v-model:visible="manualDataDialogVisible"
+      :invoice="invoiceDetail"
+      :data-issues="invoiceDetail?.dataIssues || []"
+      :submitting="manualDataSubmitting"
+      @submit="submitManualData"
     />
 
     <el-dialog
