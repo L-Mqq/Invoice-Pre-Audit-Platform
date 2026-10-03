@@ -52,13 +52,16 @@ function validateStoredInvoiceData({
 function toDataIssues(errors) {
   return errors.map((error) => {
     const isItemIssue = error.field.startsWith('items.')
+    const sourceField = isItemIssue
+      ? error.field.replace(/^items\./, '')
+      : error.field
 
     return {
       code: error.code,
       scope: isItemIssue ? 'item' : 'invoice',
-      field: isItemIssue
-        ? error.field.replace(/^items\./, '')
-        : error.field,
+      field: sourceField === 'amount'
+        ? 'lineAmount'
+        : sourceField,
       itemIndex: error.index,
       message: error.message,
     }
@@ -73,7 +76,48 @@ function getDataIssueReason(dataIssues) {
     .join('；')}`
 }
 
+function getManualProcessingContext({
+  invoice,
+  items,
+}) {
+  const validation = validateStoredInvoiceData({
+    invoice,
+    items,
+  })
+  const dataIssues = toDataIssues(validation.errors).map((issue) => {
+    if (issue.scope !== 'item' || issue.itemIndex === null) {
+      return issue
+    }
+
+    return {
+      ...issue,
+      itemId: items[issue.itemIndex]?.id || null,
+    }
+  })
+  const completionRequired = dataIssues.length > 0
+  const isPendingManual = invoice.qualification_status === 'pending_manual'
+  const canModifyData = invoice.finance_status === 'not_submitted'
+    && invoice.reimbursement_status === 'not_completed'
+
+  return {
+    completionRequired,
+    dataIssues,
+    manualProcessingType: isPendingManual
+      ? completionRequired
+        ? 'data_completion'
+        : 'category_confirmation'
+      : null,
+    canManualCompleteData: completionRequired
+      && isPendingManual
+      && canModifyData,
+    canConfirmCategory: !completionRequired
+      && isPendingManual
+      && canModifyData,
+  }
+}
+
 module.exports = {
+  getManualProcessingContext,
   toDataIssues,
   getDataIssueReason,
   validateStoredInvoiceData,

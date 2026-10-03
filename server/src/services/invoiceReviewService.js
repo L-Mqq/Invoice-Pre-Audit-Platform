@@ -8,6 +8,7 @@ const {
 } = require('./priceJudgmentService')
 const {
   getDataIssueReason,
+  getManualProcessingContext,
   toDataIssues,
   validateStoredInvoiceData,
 } = require('./invoiceDataValidationService')
@@ -983,6 +984,17 @@ async function submitInvoiceForReview({
       connection,
       invoiceId: normalizedInvoiceId,
     })
+    const manualProcessing = getManualProcessingContext({
+      invoice,
+      items,
+    })
+
+    if (manualProcessing.completionRequired) {
+      throw createHttpError(
+        409,
+        `资料待补全，不能提交审核：${getDataIssueReason(manualProcessing.dataIssues)}`,
+      )
+    }
     const nonApprovedItem = items.find(
       (item) => item.final_category_result !== '可以',
     )
@@ -1128,6 +1140,17 @@ async function reviewInvoiceQualification({
         connection,
         invoiceId: normalizedInvoiceId,
       })
+      const manualProcessing = getManualProcessingContext({
+        invoice,
+        items,
+      })
+
+      if (manualProcessing.completionRequired) {
+        throw createHttpError(
+          409,
+          `资料待补全，不能执行规则审核：${getDataIssueReason(manualProcessing.dataIssues)}`,
+        )
+      }
 
       decision = await resolveApprovalDecision({
         connection,

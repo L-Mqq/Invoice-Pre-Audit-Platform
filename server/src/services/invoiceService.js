@@ -1,5 +1,8 @@
 const invoiceRepository = require('../repositories/invoiceRepository')
 const invoiceFileRepository = require('../repositories/invoiceFileRepository')
+const {
+  getManualProcessingContext,
+} = require('./invoiceDataValidationService')
 
 const QUALIFICATION_STATUSES = new Set([
   'pending',
@@ -118,6 +121,10 @@ async function getInvoiceDetail(rawInvoiceId) {
     invoiceRepository.findItemsByInvoiceId(invoiceId),
     invoiceFileRepository.findByInvoiceId(invoiceId),
   ])
+  const manualProcessing = getManualProcessingContext({
+    invoice,
+    items,
+  })
 
   return {
     id: invoice.id,
@@ -136,6 +143,11 @@ async function getInvoiceDetail(rawInvoiceId) {
     sourceBatchId: invoice.source_batch_id,
     aiRawResult: invoice.ai_raw_result,
     manualNote: invoice.manual_note,
+    completionRequired: manualProcessing.completionRequired,
+    dataIssues: manualProcessing.dataIssues,
+    manualProcessingType: manualProcessing.manualProcessingType,
+    canManualCompleteData: manualProcessing.canManualCompleteData,
+    canConfirmCategory: manualProcessing.canConfirmCategory,
     createdAt: invoice.created_at,
     updatedAt: invoice.updated_at,
     items: items.map((item) => ({
