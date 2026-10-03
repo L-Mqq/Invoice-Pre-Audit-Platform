@@ -14,6 +14,26 @@ async function reviewItemCategory(req, res, next) {
   }
 }
 
+// 保存管理员对发票基础信息和商品明细的人工补全。
+async function updateInvoiceManualData(req, res, next) {
+  try {
+    const result = await invoiceReviewService.updateInvoiceManualData({
+      invoiceId: req.params.invoiceId,
+      invoice: req.body?.invoice,
+      items: req.body?.items,
+      note: req.body?.note,
+      operatorId: req.user.id,
+    })
+
+    res.json({
+      success: true,
+      data: result,
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
 // 提交审核
 async function submitInvoiceForReview(req, res, next) {
   try {
@@ -68,6 +88,7 @@ async function reviewInvoiceQualification(req, res, next) {
 
 module.exports = {
   reviewItemCategory,
+  updateInvoiceManualData,
   submitInvoiceForReview,
   getInvoiceQualificationPreview,
   reviewInvoiceQualification,

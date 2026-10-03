@@ -6,6 +6,11 @@ const {
   PRICE_TYPES,
   classifyUnitPrice,
 } = require('./priceJudgmentService')
+const {
+  getDataIssueReason,
+  toDataIssues,
+  validateStoredInvoiceData,
+} = require('./invoiceDataValidationService')
 
 const ALLOWED_RESULTS = new Set(['可以', '存疑', '不可以'])
 const QUALIFICATION_ACTIONS = new Set([
@@ -53,6 +58,264 @@ function validateNote(note, action) {
   }
 
   return normalizedNote || null
+}
+
+// 判断是不是“普通对象”，排除 null、数组、函数等。
+function isPlainObject(value) {
+  return Boolean(value)
+    && typeof value === 'object'
+    && !Array.isArray(value)
+}
+// 判断对象有没有这个字段
+function hasOwn(object, key) {
+  return Object.prototype.hasOwnProperty.call(object, key)
+}
+// 校验并标准化文本字段
+function normalizeOptionalText({
+  value,
+  fieldName,
+  maxLength,
+}) {
+  if (value === undefined) {
+    return undefined
+  }
+
+  if (value !== null && typeof value !== 'string') {
+    throw createHttpError(400, `${fieldName} 必须是文本`)
+  }
+
+  const normalizedValue = typeof value === 'string'
+    ? value.trim()
+    : ''
+
+  if (normalizedValue.length > maxLength) {
+    throw createHttpError(400, `${fieldName} 不能超过 ${maxLength} 个字符`)
+  }
+
+  return normalizedValue || null
+}
+// 校验日期字段
+function normalizeOptionalDate(value) {
+  if (value === undefined) {
+    return undefined
+  }
+
+  if (value === null || value === '') {
+    return null
+  }
+
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw createHttpError(400, 'invoiceDate 必须是 YYYY-MM-DD 格式')
+  }
+
+  const date = new Date(`${value}T00:00:00.000Z`)
+
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
+    throw createHttpError(400, 'invoiceDate 无效')
+  }
+
+  return value
+}
+// 校验非负数字、
+function normalizeNonNegativeNumber({
+  value,
+  fieldName,
+}) {
+  if (value === null || value === undefined || value === '') {
+    throw createHttpError(400, `${fieldName} 不能为空`)
+  }
+
+  const normalizedValue = typeof value === 'number'
+    ? value
+    : Number(value)
+
+  if (!Number.isFinite(normalizedValue) || normalizedValue < 0) {
+    throw createHttpError(400, `${fieldName} 必须是大于等于 0 的数字`)
+  }
+
+  return normalizedValue
+}
+// 校验“人工补全说明”、
+function normalizeManualNote(note) {
+  const normalizedNote = normalizeOptionalText({
+    value: note,
+    fieldName: 'note',
+    maxLength: 2000,
+  })
+
+  if (!normalizedNote) {
+    throw createHttpError(400, '人工补全资料必须填写处理说明')
+  }
+
+  return normalizedNote
+}
+// 校验“发票基础信息的修改”
+function normalizeInvoicePatch(invoice) {
+  if (invoice === undefined || invoice === null) {
+    return {}
+  }
+
+  if (!isPlainObject(invoice)) {
+    throw createHttpError(400, 'invoice 必须是对象')
+  }
+
+  const patch = {}
+
+  if (hasOwn(invoice, 'sellerName')) {
+    patch.sellerName = normalizeOptionalText({
+      value: invoice.sellerName,
+      fieldName: 'sellerName',
+      maxLength: 255,
+    })
+  }
+
+  if (hasOwn(invoice, 'sellerTaxId')) {
+    patch.sellerTaxId = normalizeOptionalText({
+      value: invoice.sellerTaxId,
+      fieldName: 'sellerTaxId',
+      maxLength: 32,
+    })
+  }
+
+  if (hasOwn(invoice, 'invoiceDate')) {
+    patch.invoiceDate = normalizeOptionalDate(invoice.invoiceDate)
+  }
+
+  if (hasOwn(invoice, 'totalAmount')) {
+    patch.totalAmount = normalizeNonNegativeNumber({
+      value: invoice.totalAmount,
+      fieldName: 'totalAmount',
+    })
+  }
+
+  return patch
+}
+// 校验“单个商品明细”
+function normalizeManualItem({
+  item,
+  index,
+}) {
+  if (!isPlainObject(item)) {
+    throw createHttpError(400, `items[${index}] 必须是对象`)
+  }
+
+  let itemId = null
+
+  if (hasOwn(item, 'itemId')) {
+    itemId = parsePositiveInteger(item.itemId, `items[${index}].itemId`)
+  }
+
+  const itemName = normalizeOptionalText({
+    value: item.itemName,
+    fieldName: `items[${index}].itemName`,
+    maxLength: 255,
+  })
+
+  if (!itemName) {
+    throw createHttpError(400, `items[${index}].itemName 不能为空`)
+  }
+
+  return {
+    itemId,
+    itemName,
+    quantity: normalizeNonNegativeNumber({
+      value: item.quantity,
+      fieldName: `items[${index}].quantity`,
+    }),
+    unitPrice: normalizeNonNegativeNumber({
+      value: item.unitPrice,
+      fieldName: `items[${index}].unitPrice`,
+    }),
+    lineAmount: normalizeNonNegativeNumber({
+      value: item.lineAmount,
+      fieldName: `items[${index}].lineAmount`,
+    }),
+  }
+}
+// 校验“商品明细数组”
+function normalizeManualItems(items) {
+  if (items === undefined || items === null) {
+    return []
+  }
+
+  if (!Array.isArray(items)) {
+    throw createHttpError(400, 'items 必须是数组')
+  }
+
+  const itemIds = new Set()
+
+  return items.map((item, index) => {
+    const normalizedItem = normalizeManualItem({
+      item,
+      index,
+    })
+
+    if (normalizedItem.itemId) {
+      if (itemIds.has(normalizedItem.itemId)) {
+        throw createHttpError(400, 'items 不允许包含重复的 itemId')
+      }
+
+      itemIds.add(normalizedItem.itemId)
+    }
+
+    return normalizedItem
+  })
+}
+// 把日期转成“可比较的字符串”
+function toComparableDate(value) {
+  if (!value) {
+    return null
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString().slice(0, 10)
+  }
+
+  return String(value).slice(0, 10)
+}
+// 判断两个数字“相等”（容忍浮点误差）
+function isSameNumber(left, right) {
+  return Math.abs(Number(left) - Number(right)) < 0.000001
+}
+// 算出“修改后的最终值”
+function resolveEffectiveInvoiceData({
+  invoice,
+  patch,
+}) {
+  return {
+    sellerName: patch.sellerName === undefined
+      ? invoice.seller_name
+      : patch.sellerName,
+    sellerTaxId: patch.sellerTaxId === undefined
+      ? invoice.seller_tax_id
+      : patch.sellerTaxId,
+    invoiceDate: patch.invoiceDate === undefined
+      ? toComparableDate(invoice.invoice_date)
+      : patch.invoiceDate,
+    totalAmount: patch.totalAmount === undefined
+      ? Number(invoice.total_amount)
+      : patch.totalAmount,
+  }
+}
+// 判断发票基础信息“有没有变”
+function hasInvoiceDataChanged({
+  invoice,
+  effectiveInvoiceData,
+}) {
+  return invoice.seller_name !== effectiveInvoiceData.sellerName
+    || invoice.seller_tax_id !== effectiveInvoiceData.sellerTaxId
+    || toComparableDate(invoice.invoice_date) !== effectiveInvoiceData.invoiceDate
+    || !isSameNumber(invoice.total_amount, effectiveInvoiceData.totalAmount)
+}
+// 判断商品明细“有没有变”
+function hasItemDataChanged({
+  item,
+  input,
+}) {
+  return item.item_name !== input.itemName
+    || !isSameNumber(item.quantity, input.quantity)
+    || !isSameNumber(item.unit_price, input.unitPrice)
+    || !isSameNumber(item.line_amount, input.lineAmount)
 }
 // 根据商品品类结果判断发票是否能通过
 function getCategoryDecision(items) {
@@ -454,6 +717,238 @@ async function reviewItemCategory({ itemId, result, note, operatorId }) {
   }
 }
 
+// 人工补全识别缺失或异常的发票、商品资料；不覆盖 AI 原始结果。
+async function updateInvoiceManualData({
+  invoiceId,
+  invoice,
+  items,
+  note,
+  operatorId,
+}) {
+  const normalizedInvoiceId = parsePositiveInteger(invoiceId, 'invoiceId')
+  const normalizedOperatorId = parsePositiveInteger(operatorId, 'operatorId')
+  const normalizedInvoicePatch = normalizeInvoicePatch(invoice)
+  const normalizedItems = normalizeManualItems(items)
+  const normalizedNote = normalizeManualNote(note)
+
+  if (
+    Object.keys(normalizedInvoicePatch).length === 0
+    && normalizedItems.length === 0
+  ) {
+    throw createHttpError(400, '至少需要补全一项发票或商品资料')
+  }
+
+  const connection = await pool.getConnection()
+
+  try {
+    await connection.beginTransaction()
+
+    const currentInvoice = await invoiceReviewRepository.findInvoiceForManualCompletion({
+      connection,
+      invoiceId: normalizedInvoiceId,
+    })
+
+    if (!currentInvoice) {
+      throw createHttpError(404, '发票不存在')
+    }
+
+    if (currentInvoice.qualification_status !== 'pending_manual') {
+      throw createHttpError(409, '仅待人工处理的发票允许补全资料')
+    }
+
+    if (
+      currentInvoice.finance_status !== 'not_submitted'
+      || currentInvoice.reimbursement_status !== 'not_completed'
+    ) {
+      throw createHttpError(409, '已进入财务或报销流程的发票不能补全资料')
+    }
+
+    if (currentInvoice.submitted_at && normalizedItems.length > 0) {
+      throw createHttpError(
+        409,
+        '已提交审核的发票不能修改商品明细，请联系管理员处理',
+      )
+    }
+
+    const currentItems = await invoiceReviewRepository.findItemsForManualCompletion({
+      connection,
+      invoiceId: normalizedInvoiceId,
+    })
+    const initialValidation = validateStoredInvoiceData({
+      invoice: currentInvoice,
+      items: currentItems,
+    })
+
+    if (initialValidation.valid) {
+      throw createHttpError(
+        409,
+        '当前待人工处理属于商品品类确认，请使用人工确认品类入口',
+      )
+    }
+
+    const existingItemsById = new Map(
+      currentItems.map((item) => {
+        return [Number(item.id), item]
+      }),
+    )
+    const effectiveInvoiceData = resolveEffectiveInvoiceData({
+      invoice: currentInvoice,
+      patch: normalizedInvoicePatch,
+    })
+    const invoiceDataChanged = hasInvoiceDataChanged({
+      invoice: currentInvoice,
+      effectiveInvoiceData,
+    })
+    const changedItemIds = []
+    const createdItemIds = []
+
+    for (const item of normalizedItems) {
+      const priceJudgment = classifyUnitPrice(item.unitPrice)
+
+      if (item.itemId) {
+        const existingItem = existingItemsById.get(item.itemId)
+
+        if (!existingItem) {
+          throw createHttpError(400, '商品明细不属于当前发票')
+        }
+
+        if (!hasItemDataChanged({
+          item: existingItem,
+          input: item,
+        })) {
+          continue
+        }
+
+        await invoiceReviewRepository.updateItemManualData({
+          connection,
+          itemId: existingItem.id,
+          itemName: item.itemName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          priceType: priceJudgment.priceType,
+          lineAmount: item.lineAmount,
+        })
+        changedItemIds.push(existingItem.id)
+        continue
+      }
+
+      const createdItemId = await invoiceReviewRepository.createManualItemData({
+        connection,
+        invoiceId: normalizedInvoiceId,
+        itemName: item.itemName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        priceType: priceJudgment.priceType,
+        lineAmount: item.lineAmount,
+      })
+      createdItemIds.push(createdItemId)
+    }
+
+    if (
+      !invoiceDataChanged
+      && changedItemIds.length === 0
+      && createdItemIds.length === 0
+    ) {
+      throw createHttpError(400, '提交的数据未发生变化')
+    }
+
+    await invoiceReviewRepository.updateInvoiceManualData({
+      connection,
+      invoiceId: normalizedInvoiceId,
+      sellerName: effectiveInvoiceData.sellerName,
+      sellerTaxId: effectiveInvoiceData.sellerTaxId,
+      invoiceDate: effectiveInvoiceData.invoiceDate,
+      totalAmount: effectiveInvoiceData.totalAmount,
+      manualNote: normalizedNote,
+    })
+
+    const updatedInvoice = await invoiceReviewRepository.findInvoiceForManualCompletion({
+      connection,
+      invoiceId: normalizedInvoiceId,
+    })
+    const updatedItems = await invoiceReviewRepository.findItemsForManualCompletion({
+      connection,
+      invoiceId: normalizedInvoiceId,
+    })
+    const validation = validateStoredInvoiceData({
+      invoice: updatedInvoice,
+      items: updatedItems,
+    })
+    const dataIssues = toDataIssues(validation.errors)
+    let qualificationStatus = 'pending_manual'
+    let qualificationReason = getDataIssueReason(dataIssues)
+    let manualProcessingType = 'data_completion'
+
+    if (validation.valid) {
+      const categoryDecision = getCategoryDecision(updatedItems)
+
+      if (categoryDecision) {
+        qualificationStatus = categoryDecision.status
+        qualificationReason = categoryDecision.reason
+        manualProcessingType = categoryDecision.status === 'pending_manual'
+          ? 'category_confirmation'
+          : null
+      } else {
+        qualificationStatus = 'pending'
+        qualificationReason = updatedInvoice.submitted_at
+          ? '资料已补全，等待重新执行规则审核'
+          : '资料已补全，等待提交审核'
+        manualProcessingType = null
+      }
+    }
+
+    await invoiceReviewRepository.updateManualCompletionState({
+      connection,
+      invoiceId: normalizedInvoiceId,
+      qualificationStatus,
+      qualificationReason,
+    })
+
+    await invoiceReviewRepository.createQualificationReviewLog({
+      connection,
+      operatorId: normalizedOperatorId,
+      invoiceId: normalizedInvoiceId,
+      operationType: 'manual_complete_invoice_data',
+      beforeData: {
+        invoice: currentInvoice,
+        items: currentItems,
+      },
+      afterData: {
+        invoice: {
+          sellerName: effectiveInvoiceData.sellerName,
+          sellerTaxId: effectiveInvoiceData.sellerTaxId,
+          invoiceDate: effectiveInvoiceData.invoiceDate,
+          totalAmount: effectiveInvoiceData.totalAmount,
+          manualNote: normalizedNote,
+        },
+        changedItemIds,
+        createdItemIds,
+        dataIssues,
+        qualificationStatus,
+        qualificationReason,
+      },
+    })
+
+    await connection.commit()
+
+    return {
+      id: normalizedInvoiceId,
+      qualificationStatus,
+      qualificationReason,
+      completionRequired: dataIssues.length > 0,
+      dataIssues,
+      manualProcessingType,
+      changedItemIds,
+      createdItemIds,
+    }
+  } catch (error) {
+    await connection.rollback()
+    throw error
+  } finally {
+    connection.release()
+  }
+}
+
 // 提交审核的更新submitted_at的时间
 async function submitInvoiceForReview({
   invoiceId,
@@ -734,6 +1229,7 @@ async function reviewInvoiceQualification({
 
 module.exports = {
   reviewItemCategory,
+  updateInvoiceManualData,
   submitInvoiceForReview,
   getInvoiceQualificationPreview,
   reviewInvoiceQualification,

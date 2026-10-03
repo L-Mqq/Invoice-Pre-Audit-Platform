@@ -228,6 +228,176 @@ async function findItemsForQualificationPreview({
   return rows
 }
 
+// 锁定人工补全资料所需的发票字段；AI 原始结果不参与更新。
+async function findInvoiceForManualCompletion({
+  connection = pool,
+  invoiceId,
+}) {
+  const [rows] = await connection.execute(
+    `SELECT
+       id,
+       invoice_number,
+       invoice_date,
+       seller_name,
+       seller_tax_id,
+       total_amount,
+       submitted_at,
+       qualification_status,
+       qualification_reason,
+       finance_status,
+       reimbursement_status,
+       manual_note
+     FROM invoices
+     WHERE id = ?
+     FOR UPDATE`,
+    [invoiceId],
+  )
+
+  return rows[0] || null
+}
+
+// 锁定人工补全资料所需的商品明细，避免并发修改同一发票。
+async function findItemsForManualCompletion({
+  connection = pool,
+  invoiceId,
+}) {
+  const [rows] = await connection.execute(
+    `SELECT
+       id,
+       invoice_id,
+       item_name,
+       quantity,
+       unit_price,
+       price_type,
+       line_amount,
+       ai_category_result,
+       ai_category_reason,
+       manual_category_result,
+       manual_category_reason,
+       final_category_result
+     FROM invoice_items
+     WHERE invoice_id = ?
+     ORDER BY id
+     FOR UPDATE`,
+    [invoiceId],
+  )
+
+  return rows
+}
+
+async function updateInvoiceManualData({
+  connection = pool,
+  invoiceId,
+  sellerName,
+  sellerTaxId,
+  invoiceDate,
+  totalAmount,
+  manualNote,
+}) {
+  await connection.execute(
+    `UPDATE invoices
+     SET seller_name = ?,
+         seller_tax_id = ?,
+         invoice_date = ?,
+         total_amount = ?,
+         manual_note = ?,
+         cumulative_amount = NULL,
+         cumulative_week_start = NULL
+     WHERE id = ?`,
+    [
+      sellerName,
+      sellerTaxId,
+      invoiceDate,
+      totalAmount,
+      manualNote,
+      invoiceId,
+    ],
+  )
+}
+
+async function updateItemManualData({
+  connection = pool,
+  itemId,
+  itemName,
+  quantity,
+  unitPrice,
+  priceType,
+  lineAmount,
+}) {
+  await connection.execute(
+    `UPDATE invoice_items
+     SET item_name = ?,
+         quantity = ?,
+         unit_price = ?,
+         price_type = ?,
+         line_amount = ?,
+         manual_category_result = NULL,
+         manual_category_reason = NULL,
+         final_category_result = NULL
+     WHERE id = ?`,
+    [
+      itemName,
+      quantity,
+      unitPrice,
+      priceType,
+      lineAmount,
+      itemId,
+    ],
+  )
+}
+
+async function createManualItemData({
+  connection = pool,
+  invoiceId,
+  itemName,
+  quantity,
+  unitPrice,
+  priceType,
+  lineAmount,
+}) {
+  const [result] = await connection.execute(
+    `INSERT INTO invoice_items
+      (
+        invoice_id,
+        item_name,
+        quantity,
+        unit_price,
+        price_type,
+        line_amount
+      )
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [
+      invoiceId,
+      itemName,
+      quantity,
+      unitPrice,
+      priceType,
+      lineAmount,
+    ],
+  )
+
+  return result.insertId
+}
+
+async function updateManualCompletionState({
+  connection = pool,
+  invoiceId,
+  qualificationStatus,
+  qualificationReason,
+}) {
+  await connection.execute(
+    `UPDATE invoices
+     SET qualification_status = ?,
+         qualification_reason = ?
+     WHERE id = ?`,
+    [
+      qualificationStatus,
+      qualificationReason,
+      invoiceId,
+    ],
+  )
+}
+
 // 算出一个日期所在自然周的「周一」日期
 async function getWeekStart({
   connection = pool,
@@ -413,6 +583,12 @@ module.exports = {
   findInvoiceForQualificationPreview,
   findItemsForQualificationReview,
   findItemsForQualificationPreview,
+  findInvoiceForManualCompletion,
+  findItemsForManualCompletion,
+  updateInvoiceManualData,
+  updateItemManualData,
+  createManualItemData,
+  updateManualCompletionState,
   getWeekStart,
   findApprovedInvoicesForWeek,
   findApprovedInvoicesForWeekPreview,

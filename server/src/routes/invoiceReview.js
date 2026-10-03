@@ -6,6 +6,11 @@ const router = express.Router()
 router.use(authMiddleware)
 // 更新商品品类的审核结果
 router.patch('/items/:itemId/category', controller.reviewItemCategory)
+// 人工补全识别缺失或异常的发票、商品资料。
+router.patch(
+  '/invoices/:invoiceId/manual-data',
+  controller.updateInvoiceManualData,
+)
 // 提交审核的更新submitted_at的时间
 router.patch(
   '/invoices/:invoiceId/submit',
