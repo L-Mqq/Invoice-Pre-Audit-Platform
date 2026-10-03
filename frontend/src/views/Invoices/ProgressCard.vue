@@ -8,6 +8,7 @@ import {
   type FinanceStatus,
   type FinanceWeekInvoice,
   type FinanceWeekGroup,
+  type ReimbursementStatus,
 } from '../../apis/finance'
 import {
   getFinanceStatusLabel as getInvoiceFinanceStatusLabel,
@@ -30,6 +31,10 @@ const activeTab = ref<FinanceStatus>('not_submitted')
 const weekFilter = ref('all')
 const sellerFilter = ref('')
 const expandedGroupIds = ref<string[]>([])
+const reimbursementDialogVisible = ref(false)
+const selectedReimbursementInvoice = ref<FinanceWeekInvoice | null>(null)
+const selectedReimbursementGroup = ref<FinanceWeekGroup | null>(null)
+const selectedReimbursementStatus = ref<Exclude<ReimbursementStatus, 'not_completed'>>('success')
 const route = useRoute()
 const router = useRouter()
 
@@ -46,6 +51,8 @@ const {
   submitFinanceGroup,
   submittingGroupKey,
   summary,
+  updateInvoiceReimbursement,
+  updatingInvoiceId,
 } = useFinanceProgress()
 
 const weekOptions = computed(() => {
@@ -174,6 +181,72 @@ async function handleSubmitFinance(group: FinanceWeekGroup) {
     const message = error instanceof Error
       ? error.message
       : '提交财务失败，请稍后重试'
+
+    ElMessage.error(message)
+  }
+}
+
+function canUpdateReimbursementStatus(invoice: FinanceWeekInvoice): boolean {
+  return invoice.qualificationStatus === 'approved'
+    && invoice.financeStatus === 'submitted'
+    && invoice.reimbursementStatus === 'not_completed'
+}
+
+function isInvoiceReimbursementUpdating(invoice: FinanceWeekInvoice): boolean {
+  return updatingInvoiceId.value === invoice.id
+}
+
+function openReimbursementDialog(
+  invoice: FinanceWeekInvoice,
+  group: FinanceWeekGroup,
+) {
+  if (!canUpdateReimbursementStatus(invoice) || updatingInvoiceId.value !== null) {
+    return
+  }
+
+  selectedReimbursementInvoice.value = invoice
+  selectedReimbursementGroup.value = group
+  selectedReimbursementStatus.value = 'success'
+  reimbursementDialogVisible.value = true
+}
+
+function getReimbursementActionLabel(
+  status: ReimbursementStatus,
+): string {
+  if (status === 'success') {
+    return '报销成功'
+  }
+
+  if (status === 'failed') {
+    return '报销失败'
+  }
+
+  return '未完成'
+}
+
+async function confirmReimbursementStatus() {
+  const invoice = selectedReimbursementInvoice.value
+  const group = selectedReimbursementGroup.value
+
+  if (!invoice || !group) {
+    return
+  }
+
+  try {
+    const result = await updateInvoiceReimbursement({
+      group,
+      invoice,
+      reimbursementStatus: selectedReimbursementStatus.value,
+    })
+
+    reimbursementDialogVisible.value = false
+    ElMessage.success(
+      `发票 ${invoice.invoiceNumber || `#${invoice.id}`} 已登记为${getReimbursementActionLabel(result.reimbursementStatus)}`,
+    )
+  } catch (error) {
+    const message = error instanceof Error
+      ? error.message
+      : '登记报销结果失败，请稍后重试'
 
     ElMessage.error(message)
   }
@@ -463,10 +536,20 @@ onMounted(async () => {
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="100" fixed="right">
+            <el-table-column label="操作" width="190" fixed="right">
               <template #default="{ row }">
                 <el-button link type="primary" @click="goToInvoiceDetail(row, group)">
                   查看详情
+                </el-button>
+                <el-button
+                  v-if="canUpdateReimbursementStatus(row)"
+                  link
+                  type="success"
+                  :loading="isInvoiceReimbursementUpdating(row)"
+                  :disabled="updatingInvoiceId !== null"
+                  @click="openReimbursementDialog(row, group)"
+                >
+                  登记结果
                 </el-button>
               </template>
             </el-table-column>
@@ -475,6 +558,56 @@ onMounted(async () => {
       </el-card>
     </div>
   </section>
+
+  <el-dialog
+    v-model="reimbursementDialogVisible"
+    title="登记最终报销结果"
+    width="460px"
+    :close-on-click-modal="updatingInvoiceId === null"
+    :close-on-press-escape="updatingInvoiceId === null"
+    :show-close="updatingInvoiceId === null"
+  >
+    <div v-if="selectedReimbursementInvoice" class="reimbursement-dialog-content">
+      <p>
+        发票号码：{{ selectedReimbursementInvoice.invoiceNumber || `#${selectedReimbursementInvoice.id}` }}
+      </p>
+      <p>
+        价税合计：{{ formatAmount(selectedReimbursementInvoice.totalAmount) }}
+      </p>
+
+      <el-radio-group v-model="selectedReimbursementStatus">
+        <el-radio value="success">
+          报销成功
+        </el-radio>
+        <el-radio value="failed">
+          报销失败
+        </el-radio>
+      </el-radio-group>
+
+      <el-alert
+        title="当前版本提交后不可修改，请核对报销结果后再确认。"
+        type="warning"
+        :closable="false"
+        show-icon
+      />
+    </div>
+
+    <template #footer>
+      <el-button
+        :disabled="updatingInvoiceId !== null"
+        @click="reimbursementDialogVisible = false"
+      >
+        取消
+      </el-button>
+      <el-button
+        type="primary"
+        :loading="updatingInvoiceId !== null"
+        @click="confirmReimbursementStatus"
+      >
+        确认登记
+      </el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <style scoped>

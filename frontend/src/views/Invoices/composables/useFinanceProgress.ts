@@ -6,9 +6,11 @@ import {
   getFinanceWeekInvoices,
   getFinanceWeeks,
   submitFinanceWeek,
+  updateReimbursementStatus,
   type FinanceWeekInvoice,
   type FinanceWeekGroup,
   type FinanceWeeksResponse,
+  type ReimbursementStatus,
 } from '../../../apis/finance'
 
 function getErrorMessage(error: unknown): string {
@@ -27,6 +29,7 @@ export function useFinanceProgress() {
   const loading = ref(false)
   const loadError = ref('')
   const submittingGroupKey = ref('')
+  const updatingInvoiceId = ref<number | null>(null)
   const summary = ref<FinanceWeeksResponse['summary']>({
     pendingGroupCount: 0,
     submittedGroupCount: 0,
@@ -113,6 +116,44 @@ export function useFinanceProgress() {
     }
   }
 
+  async function updateInvoiceReimbursement({
+    group,
+    invoice,
+    reimbursementStatus,
+  }: {
+    group: FinanceWeekGroup
+    invoice: FinanceWeekInvoice
+    reimbursementStatus: Exclude<ReimbursementStatus, 'not_completed'>
+  }) {
+    if (
+      invoice.qualificationStatus !== 'approved'
+      || invoice.financeStatus !== 'submitted'
+      || invoice.reimbursementStatus !== 'not_completed'
+    ) {
+      throw new Error('当前发票不满足登记报销结果的条件')
+    }
+
+    if (updatingInvoiceId.value !== null) {
+      throw new Error('已有发票正在登记报销结果，请稍候')
+    }
+
+    updatingInvoiceId.value = invoice.id
+
+    try {
+      const result = await updateReimbursementStatus({
+        invoiceId: invoice.id,
+        reimbursementStatus,
+      })
+
+      await loadFinanceWeeks()
+      await loadGroupInvoices(group)
+
+      return result
+    } finally {
+      updatingInvoiceId.value = null
+    }
+  }
+
   return {
     groups,
     groupInvoiceDetails,
@@ -127,5 +168,7 @@ export function useFinanceProgress() {
     submitFinanceGroup,
     submittingGroupKey,
     summary,
+    updateInvoiceReimbursement,
+    updatingInvoiceId,
   }
 }
