@@ -7,6 +7,7 @@ import {
   getQualificationStatusLabel,
   getReimbursementStatusLabel,
 } from '../../utils/status'
+import { formatChinaDate } from '../../utils/date'
 
 type InvoiceRow = InvoiceListItem
 
@@ -130,7 +131,11 @@ onMounted(loadInvoices)
         <el-table-column label="发票信息" min-width="220"><template #default="{ row }"><div class="invoice-cell"><strong>{{ row.invoiceNumber || '未识别' }}</strong><span>{{ row.file?.originalName || '无文件' }}</span></div></template></el-table-column>
         <el-table-column prop="sellerName" label="销售方" min-width="190" show-overflow-tooltip />
         <el-table-column label="价税合计" width="130" align="right"><template #default="{ row }"><strong>{{ formatAmount(row.totalAmount) }}</strong></template></el-table-column>
-        <el-table-column prop="invoiceDate" label="开票日期" width="120" />
+        <el-table-column label="开票日期" width="120">
+          <template #default="{ row }">
+            {{ formatChinaDate(row.invoiceDate) || '-' }}
+          </template>
+        </el-table-column>
         <el-table-column label="提取状态" width="110"><template #default="{ row }"><el-tag :type="row.file?.extractionStatus === 'success' ? 'success' : row.file?.extractionStatus === 'failed' ? 'danger' : 'warning'" effect="plain">{{ row.file?.extractionStatus === 'success' ? '成功' : row.file?.extractionStatus === 'failed' ? '失败' : '处理中' }}</el-tag></template></el-table-column>
         <el-table-column label="资质审核" width="130"><template #default="{ row }"><el-tag effect="plain">{{ getQualificationStatusLabel(row.qualificationStatus) }}</el-tag></template></el-table-column>
         <el-table-column label="财务提交" width="110"><template #default="{ row }">{{ getFinanceStatusLabel(row.financeStatus) }}</template></el-table-column>
