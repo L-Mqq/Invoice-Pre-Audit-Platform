@@ -9,7 +9,11 @@ const invoiceFileRepository = require('../repositories/invoiceFileRepository')
 const invoiceRepository = require('../repositories/invoiceRepository')
 const { inspectPdf } = require('../extractors/pdfTextExtractor')
 const { recognizeGeneralInvoice } = require('../extractors/tencentOcrExtractor')
-const { structureInvoiceText } = require('../extractors/agnesInvoiceParser')
+const {
+  SOURCE_TYPES,
+  isEmptyInvoiceTemplate,
+  structureInvoiceText,
+} = require('../extractors/agnesInvoiceParser')
 const { validateInvoiceExtraction } = require('../validators/invoiceExtractionValidator')
 const { judgeItems } = require('./categoryJudgmentService')
 const { judgePriceItems } = require('./priceJudgmentService')
@@ -260,7 +264,7 @@ async function getUploadBatch(batchId) {
 }
 
 // 逐个处理
-async function processFile(file) {
+async function processFileWithoutFallback(file) {
   const { text: extractedText, pageCount } = await inspectPdf(file.buffer)
   let text = extractedText
   let ocrResult = null
@@ -284,4 +288,135 @@ async function processFile(file) {
   return { pageCount, text, ocrResult, structured, validation }
 }
 
-module.exports = { createUploadBatch, getUploadBatch, processFile }
+function validateStructuredInvoice(structured) {
+  const validation = validateInvoiceExtraction(structured.data)
+  const isEmptyTemplate = isEmptyInvoiceTemplate(structured.data)
+
+  return {
+    validation,
+    isEmptyTemplate,
+    isUsable: validation.valid && !isEmptyTemplate,
+  }
+}
+
+function assertOcrSupportedPageCount(pageCount) {
+  const maxPages = getExtractionConfig().tencent.maxPages
+
+  if (!Number.isInteger(pageCount) || pageCount < 1) {
+    const error = new Error('无法读取 PDF 页数')
+
+    error.code = 'PDF_PAGE_COUNT_INVALID'
+
+    throw error
+  }
+
+  if (pageCount > maxPages) {
+    const error = new Error(`PDF 页数超过 OCR 支持上限（最大 ${maxPages} 页）`)
+
+    error.code = 'PDF_PAGE_LIMIT_EXCEEDED'
+
+    throw error
+  }
+}
+
+async function structureFromOcr({
+  file,
+  pageCount,
+}) {
+  assertOcrSupportedPageCount(pageCount)
+
+  const ocrResult = await recognizeGeneralInvoice(file.buffer)
+  const structured = await structureInvoiceText(
+    ocrResult.text,
+    {
+      sourceType: SOURCE_TYPES.TENCENT_OCR,
+    },
+  )
+  const quality = validateStructuredInvoice(structured)
+
+  return {
+    ocrResult,
+    quality,
+    structured,
+    text: ocrResult.text,
+  }
+}
+
+// PDF 文本结构化不合格或出现空模板时，强制 OCR 进行一次兜底。
+async function processFile(file) {
+  const { text: extractedText, pageCount } = await inspectPdf(file.buffer)
+
+  if (extractedText) {
+    let structured
+    let quality
+    let initialAttempt
+
+    try {
+      structured = await structureInvoiceText(
+        extractedText,
+        {
+          sourceType: SOURCE_TYPES.PDF_TEXT,
+        },
+      )
+      quality = validateStructuredInvoice(structured)
+      initialAttempt = {
+        isEmptyTemplate: quality.isEmptyTemplate,
+        sourceType: SOURCE_TYPES.PDF_TEXT,
+        validationErrors: quality.validation.errors,
+      }
+    } catch (error) {
+      initialAttempt = {
+        error: error.message,
+        isEmptyTemplate: false,
+        sourceType: SOURCE_TYPES.PDF_TEXT,
+        validationErrors: [],
+      }
+    }
+
+    if (quality?.isUsable) {
+      return {
+        fallbackUsed: false,
+        ocrResult: null,
+        pageCount,
+        structured,
+        text: extractedText,
+        validation: quality.validation,
+      }
+    }
+
+    const ocrExtraction = await structureFromOcr({
+      file,
+      pageCount,
+    })
+
+    return {
+      fallbackUsed: true,
+      initialAttempt,
+      ocrResult: ocrExtraction.ocrResult,
+      pageCount,
+      structured: ocrExtraction.structured,
+      text: ocrExtraction.text,
+      validation: ocrExtraction.quality.validation,
+    }
+  }
+
+  const ocrExtraction = await structureFromOcr({
+    file,
+    pageCount,
+  })
+
+  return {
+    fallbackUsed: false,
+    ocrResult: ocrExtraction.ocrResult,
+    pageCount,
+    structured: ocrExtraction.structured,
+    text: ocrExtraction.text,
+    validation: ocrExtraction.quality.validation,
+  }
+}
+
+module.exports = {
+  createUploadBatch,
+  getUploadBatch,
+  processFile,
+}
