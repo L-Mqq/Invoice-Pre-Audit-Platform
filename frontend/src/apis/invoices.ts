@@ -1,6 +1,16 @@
 import axios from 'axios'
 import http from '../utils/http'
 
+export type PreAuditStatus =
+  | 'pending'
+  | 'pending_voucher'
+  | 'pending_weekly_voucher'
+  | 'waiting_group_vouchers'
+  | 'pending_manual'
+  | 'approved'
+  | 'rejected'
+  | 'cancelled'
+
 export interface InvoiceListItem {
   id: number
   invoiceNumber: string | null
@@ -11,6 +21,10 @@ export interface InvoiceListItem {
   submittedAt: string | null
   qualificationStatus: string
   qualificationReason: string | null
+  preAuditStatus: PreAuditStatus
+  preAuditStatusReason: string | null
+  weeklyVoucherStatus: 'not_required' | 'pending' | 'approved'
+  weeklyVoucherRequirementId: number | string | null
   cumulativeAmount: number | string | null
   cumulativeWeekStart: string | null
   financeStatus: string
@@ -30,6 +44,7 @@ export interface InvoiceListQuery {
   page: number
   pageSize: number
   qualificationStatus?: string
+  preAuditStatus?: PreAuditStatus
   financeStatus?: string
   reimbursementStatus?: string
   sellerName?: string

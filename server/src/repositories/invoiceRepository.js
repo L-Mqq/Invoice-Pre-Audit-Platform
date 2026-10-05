@@ -74,6 +74,7 @@ async function findPage({
   page,
   pageSize,
   qualificationStatus,
+  preAuditStatus,
   financeStatus,
   reimbursementStatus,
   sellerName,
@@ -81,6 +82,52 @@ async function findPage({
 }) {
   const conditions = []
   const params = []
+
+  const pendingWeeklyVoucherJoin = `
+    LEFT JOIN (
+      SELECT
+        wvri.invoice_id,
+        MAX(wvr.id) AS requirement_id,
+        MIN(
+          CASE
+            WHEN wvri.voucher_status = 'approved' THEN 1
+            ELSE 0
+          END
+        ) AS voucher_approved
+      FROM weekly_voucher_requirement_invoices wvri
+      JOIN weekly_voucher_requirements wvr
+        ON wvr.id = wvri.requirement_id
+       AND wvr.status = 'pending'
+      GROUP BY wvri.invoice_id
+    ) pending_weekly_voucher
+      ON pending_weekly_voucher.invoice_id = i.id`
+
+  if (preAuditStatus === 'pending_weekly_voucher') {
+    conditions.push(`
+      i.qualification_status NOT IN ('cancelled', 'rejected', 'pending_manual')
+      AND pending_weekly_voucher.requirement_id IS NOT NULL
+      AND pending_weekly_voucher.voucher_approved = 0
+    `)
+  } else if (preAuditStatus === 'waiting_group_vouchers') {
+    conditions.push(`
+      i.qualification_status NOT IN ('cancelled', 'rejected', 'pending_manual')
+      AND pending_weekly_voucher.requirement_id IS NOT NULL
+      AND pending_weekly_voucher.voucher_approved = 1
+    `)
+  } else if (preAuditStatus) {
+    if (
+      preAuditStatus === 'cancelled'
+      || preAuditStatus === 'rejected'
+      || preAuditStatus === 'pending_manual'
+    ) {
+      conditions.push('i.qualification_status = ?')
+    } else {
+      conditions.push('pending_weekly_voucher.requirement_id IS NULL')
+      conditions.push('i.qualification_status = ?')
+    }
+
+    params.push(preAuditStatus)
+  }
   if (qualificationStatus) {
     conditions.push('i.qualification_status = ?')
     params.push(qualificationStatus)
@@ -106,6 +153,7 @@ async function findPage({
   const [countRows] = await pool.execute(
     `SELECT COUNT(*) AS total
      FROM invoices i
+     ${pendingWeeklyVoucherJoin}
      ${whereClause}`,
     params,
   )
@@ -127,11 +175,14 @@ async function findPage({
        i.source_batch_id,
        i.created_at,
        i.updated_at,
+       pending_weekly_voucher.requirement_id AS pending_weekly_voucher_requirement_id,
+       pending_weekly_voucher.voucher_approved AS pending_weekly_voucher_approved,
        f.id AS file_id,
        f.original_name,
        f.extraction_status,
        f.extraction_error
      FROM invoices i
+     ${pendingWeeklyVoucherJoin}
      LEFT JOIN invoice_files f ON f.invoice_id = i.id
      ${whereClause}
      ORDER BY i.created_at DESC, i.id DESC

@@ -12,6 +12,16 @@ const QUALIFICATION_STATUSES = new Set([
   'rejected',
   'cancelled',
 ])
+const PRE_AUDIT_STATUSES = new Set([
+  'pending',
+  'pending_voucher',
+  'pending_weekly_voucher',
+  'waiting_group_vouchers',
+  'pending_manual',
+  'approved',
+  'rejected',
+  'cancelled',
+])
 const FINANCE_STATUSES = new Set(['not_submitted', 'submitted'])
 const REIMBURSEMENT_STATUSES = new Set(['not_completed', 'success', 'failed'])
 
@@ -53,53 +63,98 @@ function notFound(message) {
   return error
 }
 
+function getPreAuditStatus(row) {
+  if (
+    row.qualification_status === 'cancelled'
+    || row.qualification_status === 'rejected'
+    || row.qualification_status === 'pending_manual'
+  ) {
+    return row.qualification_status
+  }
+
+  if (row.pending_weekly_voucher_requirement_id) {
+    return Number(row.pending_weekly_voucher_approved) === 1
+      ? 'waiting_group_vouchers'
+      : 'pending_weekly_voucher'
+  }
+
+  return row.qualification_status
+}
+
+function getPreAuditStatusReason(row, preAuditStatus) {
+  if (preAuditStatus === 'pending_weekly_voucher') {
+    return '资质审核已通过；本自然周累计超过 1000 元，需补齐支付凭证'
+  }
+
+  if (preAuditStatus === 'waiting_group_vouchers') {
+    return '本票支付凭证已通过，等待组内其他关联发票完成凭证'
+  }
+
+  return row.qualification_reason
+}
+
 async function listInvoices(query = {}) {
   const page = parsePositiveInteger(query.page, 1)
   const pageSize = Math.min(parsePositiveInteger(query.pageSize, 20), 100)
   const qualificationStatus = query.qualificationStatus || undefined
+  const preAuditStatus = query.preAuditStatus || undefined
   const financeStatus = query.financeStatus || undefined
   const reimbursementStatus = query.reimbursementStatus || undefined
   const sellerName = typeof query.sellerName === 'string' ? query.sellerName.trim() : undefined
   const invoiceNumber = typeof query.invoiceNumber === 'string' ? query.invoiceNumber.trim() : undefined
   validateStatus(qualificationStatus, QUALIFICATION_STATUSES, '资质审核状态无效')
+  validateStatus(preAuditStatus, PRE_AUDIT_STATUSES, '预审状态无效')
   validateStatus(financeStatus, FINANCE_STATUSES, '财务提交状态无效')
   validateStatus(reimbursementStatus, REIMBURSEMENT_STATUSES, '报销状态无效')
   const result = await invoiceRepository.findPage({
     page,
     pageSize,
     qualificationStatus,
+    preAuditStatus,
     financeStatus,
     reimbursementStatus,
     sellerName,
     invoiceNumber,
   })
   return {
-    items: result.rows.map((row) => ({
-      id: row.id,
-      invoiceNumber: row.invoice_number,
-      invoiceDate: row.invoice_date,
-      sellerName: row.seller_name,
-      sellerTaxId: row.seller_tax_id,
-      totalAmount: row.total_amount,
-      submittedAt: row.submitted_at,
-      qualificationStatus: row.qualification_status,
-      qualificationReason: row.qualification_reason,
-      cumulativeAmount: row.cumulative_amount,
-      cumulativeWeekStart: row.cumulative_week_start,
-      financeStatus: row.finance_status,
-      reimbursementStatus: row.reimbursement_status,
-      sourceBatchId: row.source_batch_id,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      file: row.file_id
-        ? {
-            id: row.file_id,
-            originalName: row.original_name,
-            extractionStatus: row.extraction_status,
-            extractionError: row.extraction_error,
-          }
-        : null,
-    })),
+    items: result.rows.map((row) => {
+      const preAuditStatus = getPreAuditStatus(row)
+
+      return {
+        id: row.id,
+        invoiceNumber: row.invoice_number,
+        invoiceDate: row.invoice_date,
+        sellerName: row.seller_name,
+        sellerTaxId: row.seller_tax_id,
+        totalAmount: row.total_amount,
+        submittedAt: row.submitted_at,
+        qualificationStatus: row.qualification_status,
+        qualificationReason: row.qualification_reason,
+        preAuditStatus,
+        preAuditStatusReason: getPreAuditStatusReason(row, preAuditStatus),
+        weeklyVoucherStatus: row.pending_weekly_voucher_requirement_id
+          ? Number(row.pending_weekly_voucher_approved) === 1
+            ? 'approved'
+            : 'pending'
+          : 'not_required',
+        weeklyVoucherRequirementId: row.pending_weekly_voucher_requirement_id || null,
+        cumulativeAmount: row.cumulative_amount,
+        cumulativeWeekStart: row.cumulative_week_start,
+        financeStatus: row.finance_status,
+        reimbursementStatus: row.reimbursement_status,
+        sourceBatchId: row.source_batch_id,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        file: row.file_id
+          ? {
+              id: row.file_id,
+              originalName: row.original_name,
+              extractionStatus: row.extraction_status,
+              extractionError: row.extraction_error,
+            }
+          : null,
+      }
+    }),
     pagination: {
       page,
       pageSize,

@@ -7,6 +7,17 @@ const qualificationStatusLabels: Record<string, string> = {
   cancelled: '已取消',
 }
 
+const preAuditStatusLabels: Record<string, string> = {
+  pending: '待审核',
+  pending_voucher: '待补凭证',
+  pending_weekly_voucher: '待补凭证（周累计）',
+  waiting_group_vouchers: '组内凭证待完成',
+  pending_manual: '待人工处理',
+  approved: '审核通过',
+  rejected: '审核不通过',
+  cancelled: '已取消',
+}
+
 const financeStatusLabels: Record<string, string> = {
   not_submitted: '未提交',
   submitted: '已提交',
@@ -30,6 +41,12 @@ export function getQualificationStatusLabel(
   value: string | null | undefined,
 ) {
   return getStatusLabel(qualificationStatusLabels, value)
+}
+
+export function getPreAuditStatusLabel(
+  value: string | null | undefined,
+) {
+  return getStatusLabel(preAuditStatusLabels, value)
 }
 
 export function getFinanceStatusLabel(
