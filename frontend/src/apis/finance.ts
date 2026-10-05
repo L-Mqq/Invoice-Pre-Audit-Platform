@@ -13,6 +13,7 @@ export interface FinanceWeekQuery {
 export interface FinanceWeekVoucherProgress {
   requiredInvoiceCount: number
   approvedInvoiceCount: number
+  hasCompletedRequirement: boolean
   hasPendingRequirement: boolean
 }
 
@@ -28,6 +29,7 @@ export interface FinanceWeekGroup {
   weekStart: string
   weekEnd: string
   totalInvoiceCount: number
+  activeInvoiceCount: number
   approvedInvoiceCount: number
   pendingInvoiceCount: number
   rejectedInvoiceCount: number

@@ -207,6 +207,7 @@ function createFinanceWeekGroup({
     weekStart: invoice.submitted_week_start,
     weekEnd: getWeekEnd(invoice.submitted_week_start),
     totalInvoiceCount: 0,
+    activeInvoiceCount: 0,
     approvedInvoiceCount: 0,
     pendingInvoiceCount: 0,
     rejectedInvoiceCount: 0,
@@ -222,7 +223,8 @@ function createFinanceWeekGroup({
     voucherProgress: {
       requiredInvoiceCount: Number(voucherProgress?.required_invoice_count || 0),
       approvedInvoiceCount: Number(voucherProgress?.approved_invoice_count || 0),
-      hasPendingRequirement: Boolean(voucherProgress),
+      hasCompletedRequirement: Number(voucherProgress?.has_completed_requirement || 0) === 1,
+      hasPendingRequirement: Number(voucherProgress?.has_pending_requirement || 0) === 1,
     },
   }
 }
@@ -234,11 +236,6 @@ function appendInvoiceToFinanceWeekGroup({
 }) {
   group.totalInvoiceCount += 1
 
-  if (BLOCKING_QUALIFICATION_STATUSES.has(invoice.qualification_status)) {
-    group.pendingInvoiceCount += 1
-    return
-  }
-
   if (invoice.qualification_status === 'rejected') {
     group.rejectedInvoiceCount += 1
     return
@@ -246,6 +243,13 @@ function appendInvoiceToFinanceWeekGroup({
 
   if (invoice.qualification_status === 'cancelled') {
     group.cancelledInvoiceCount += 1
+    return
+  }
+
+  group.activeInvoiceCount += 1
+
+  if (BLOCKING_QUALIFICATION_STATUSES.has(invoice.qualification_status)) {
+    group.pendingInvoiceCount += 1
     return
   }
 
@@ -309,6 +313,7 @@ function serializeFinanceWeekGroup({
     weekStart: group.weekStart,
     weekEnd: group.weekEnd,
     totalInvoiceCount: group.totalInvoiceCount,
+    activeInvoiceCount: group.activeInvoiceCount,
     approvedInvoiceCount: group.approvedInvoiceCount,
     pendingInvoiceCount: group.pendingInvoiceCount,
     rejectedInvoiceCount: group.rejectedInvoiceCount,
@@ -409,7 +414,7 @@ async function listFinanceWeeks({
       sellerKeyword: normalizedSellerKeyword,
       cumulativeWeekStart: normalizedWeekStart,
     }),
-    financeRepository.findPendingWeeklyVoucherProgress(),
+    financeRepository.findWeeklyVoucherProgress(),
   ])
   const voucherProgressByWeek = new Map(
     voucherProgressRows.map((row) => [

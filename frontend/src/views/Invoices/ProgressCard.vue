@@ -93,11 +93,15 @@ function getFinanceStatusType(status: FinanceStatus): 'success' | 'warning' {
 }
 
 function getVoucherProgressLabel(group: FinanceWeekGroup): string {
-  if (!group.voucherProgress.hasPendingRequirement) {
-    return '无需待完成的周累计凭证'
+  if (group.voucherProgress.hasPendingRequirement) {
+    return `凭证已完成 ${group.voucherProgress.approvedInvoiceCount} / ${group.voucherProgress.requiredInvoiceCount}`
   }
 
-  return `凭证已完成 ${group.voucherProgress.approvedInvoiceCount} / ${group.voucherProgress.requiredInvoiceCount}`
+  if (group.voucherProgress.hasCompletedRequirement) {
+    return '凭证已全部通过'
+  }
+
+  return '无需待完成的周累计凭证'
 }
 
 function getReimbursementSummaryLabel(group: FinanceWeekGroup): string {
@@ -453,8 +457,8 @@ onMounted(async () => {
             <strong class="amount">{{ formatAmount(group.validCumulativeAmount) }}</strong>
           </div>
           <div>
-            <span>审核通过发票</span>
-            <strong>{{ group.approvedInvoiceCount }} / {{ group.totalInvoiceCount }} 张</strong>
+            <span>审核通过发票（可参与财务）</span>
+            <strong>{{ group.approvedInvoiceCount }} / {{ group.activeInvoiceCount }} 张</strong>
           </div>
           <div>
             <span>凭证进度</span>

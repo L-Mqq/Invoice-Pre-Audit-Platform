@@ -104,22 +104,33 @@ async function findInvoicesForFinanceWeekList({
   return rows
 }
 
-// 查询进行中的周累计凭证任务及其关联发票凭证进度。
-async function findPendingWeeklyVoucherProgress({
+// 查询自然周累计凭证任务的进行中进度及已完成标记。
+async function findWeeklyVoucherProgress({
   connection = pool,
 } = {}) {
   const [rows] = await connection.execute(
     `SELECT
        wvr.seller_tax_id,
        DATE_FORMAT(wvr.cumulative_week_start, '%Y-%m-%d') AS cumulative_week_start,
-       COUNT(wvri.id) AS required_invoice_count,
-       SUM(wvri.voucher_status = 'approved') AS approved_invoice_count
+       SUM(
+         CASE
+           WHEN wvr.status = 'pending' AND wvri.id IS NOT NULL THEN 1
+           ELSE 0
+         END
+       ) AS required_invoice_count,
+       SUM(
+         CASE
+           WHEN wvr.status = 'pending' AND wvri.voucher_status = 'approved' THEN 1
+           ELSE 0
+         END
+       ) AS approved_invoice_count,
+       MAX(wvr.status = 'pending') AS has_pending_requirement,
+       MAX(wvr.status = 'completed') AS has_completed_requirement
      FROM weekly_voucher_requirements wvr
      LEFT JOIN weekly_voucher_requirement_invoices wvri
        ON wvri.requirement_id = wvr.id
-     WHERE wvr.status = 'pending'
+     WHERE wvr.status IN ('pending', 'completed')
      GROUP BY
-       wvr.id,
        wvr.seller_tax_id,
        wvr.cumulative_week_start`,
   )
@@ -341,7 +352,7 @@ module.exports = {
   findInvoicesForWeekSubmission,
   findPendingWeeklyVoucherRequirement,
   findInvoicesForFinanceWeekList,
-  findPendingWeeklyVoucherProgress,
+  findWeeklyVoucherProgress,
   findInvoicesForFinanceWeekDetail,
   markInvoicesAsFinanceSubmitted,
   createFinanceSubmissionLogs,
