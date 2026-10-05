@@ -1,8 +1,16 @@
 import axios from 'axios'
 import http from '../utils/http'
+import type {
+  PreAuditStatus,
+} from './invoices'
 
 export type FinanceStatus = 'not_submitted' | 'submitted'
 export type ReimbursementStatus = 'not_completed' | 'success' | 'failed'
+export type FinanceGroupProcessingStatus =
+  | 'pending_weekly_voucher'
+  | 'waiting'
+  | 'ready_for_finance'
+  | 'submitted'
 
 export interface FinanceWeekQuery {
   financeStatus?: FinanceStatus
@@ -13,6 +21,7 @@ export interface FinanceWeekQuery {
 export interface FinanceWeekVoucherProgress {
   requiredInvoiceCount: number
   approvedInvoiceCount: number
+  triggeredCumulativeAmount: number | null
   hasCompletedRequirement: boolean
   hasPendingRequirement: boolean
 }
@@ -35,11 +44,14 @@ export interface FinanceWeekGroup {
   rejectedInvoiceCount: number
   cancelledInvoiceCount: number
   validCumulativeAmount: number
+  currentPreAuditCompletedInvoiceCount: number
   voucherProgress: FinanceWeekVoucherProgress
   financeStatus: FinanceStatus
+  groupProcessingStatus: FinanceGroupProcessingStatus
   reimbursementSummary: FinanceWeekReimbursementSummary
   canSubmitFinance: boolean
   submitBlockedReason: string | null
+  submitBlockedReasons: string[]
 }
 
 export interface FinanceWeeksResponse {
@@ -57,6 +69,8 @@ export interface FinanceWeekInvoice {
   submittedAt: string
   qualificationStatus: string
   qualificationReason: string | null
+  preAuditStatus: PreAuditStatus
+  preAuditStatusReason: string | null
   voucherStatus: {
     code: 'not_required' | 'pending' | 'approved' | 'rejected'
     label: string

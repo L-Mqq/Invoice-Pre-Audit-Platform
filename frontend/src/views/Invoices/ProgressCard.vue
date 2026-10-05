@@ -12,7 +12,7 @@ import {
 } from '../../apis/finance'
 import {
   getFinanceStatusLabel as getInvoiceFinanceStatusLabel,
-  getQualificationStatusLabel,
+  getPreAuditStatusLabel,
   getReimbursementStatusLabel,
 } from '../../utils/status'
 import {
@@ -84,12 +84,55 @@ function getWeekLabel(group: FinanceWeekGroup): string {
   return `${group.weekStart} 至 ${group.weekEnd}`
 }
 
-function getFinanceStatusLabel(status: FinanceStatus): string {
-  return status === 'submitted' ? '已提交财务' : '待提交财务'
+function getGroupProcessingStatusLabel(group: FinanceWeekGroup): string {
+  if (group.groupProcessingStatus === 'submitted') {
+    return '已提交财务'
+  }
+
+  if (group.groupProcessingStatus === 'pending_weekly_voucher') {
+    return '待补凭证（周累计）'
+  }
+
+  if (group.groupProcessingStatus === 'ready_for_finance') {
+    return '可提交财务'
+  }
+
+  return '等待处理'
 }
 
-function getFinanceStatusType(status: FinanceStatus): 'success' | 'warning' {
-  return status === 'submitted' ? 'success' : 'warning'
+function getGroupProcessingStatusType(
+  group: FinanceWeekGroup,
+): 'success' | 'warning' | 'info' {
+  if (group.groupProcessingStatus === 'submitted') {
+    return 'success'
+  }
+
+  if (group.groupProcessingStatus === 'ready_for_finance') {
+    return 'info'
+  }
+
+  return 'warning'
+}
+
+function getCumulativeAmountLabel(group: FinanceWeekGroup): string {
+  if (group.voucherProgress.triggeredCumulativeAmount !== null) {
+    return '周累计触发金额'
+  }
+
+  return '有效累计金额'
+}
+
+function getCumulativeAmount(group: FinanceWeekGroup): number {
+  return group.voucherProgress.triggeredCumulativeAmount
+    ?? group.validCumulativeAmount
+}
+
+function getFinanceEligibilityLabel(group: FinanceWeekGroup): string {
+  if (group.financeStatus === 'submitted') {
+    return '已提交财务'
+  }
+
+  return group.canSubmitFinance ? '可提交' : '不可提交'
 }
 
 function getVoucherProgressLabel(group: FinanceWeekGroup): string {
@@ -105,6 +148,10 @@ function getVoucherProgressLabel(group: FinanceWeekGroup): string {
 }
 
 function getReimbursementSummaryLabel(group: FinanceWeekGroup): string {
+  if (group.financeStatus !== 'submitted') {
+    return '尚未开始'
+  }
+
   const summary = group.reimbursementSummary
   const parts = []
 
@@ -120,7 +167,7 @@ function getReimbursementSummaryLabel(group: FinanceWeekGroup): string {
     parts.push(`未完成 ${summary.notCompletedCount} 张`)
   }
 
-  return parts.length > 0 ? parts.join(' · ') : '尚未进入报销流程'
+  return parts.length > 0 ? parts.join(' · ') : '待登记报销结果'
 }
 
 async function toggleGroup(group: FinanceWeekGroup) {
@@ -419,8 +466,8 @@ onMounted(async () => {
           <div class="group-identity">
             <div class="group-title-row">
               <h3>{{ group.sellerName }}</h3>
-              <el-tag :type="getFinanceStatusType(group.financeStatus)" effect="light">
-                {{ getFinanceStatusLabel(group.financeStatus) }}
+              <el-tag :type="getGroupProcessingStatusType(group)" effect="light">
+                {{ getGroupProcessingStatusLabel(group) }}
               </el-tag>
             </div>
             <span>纳税人识别号：{{ group.sellerTaxId }}</span>
@@ -433,7 +480,7 @@ onMounted(async () => {
             <el-tooltip
               v-if="group.financeStatus === 'not_submitted'"
               :disabled="group.canSubmitFinance"
-              :content="group.submitBlockedReason || ''"
+              :content="group.submitBlockedReasons.join('；')"
             >
               <el-button
                 type="primary"
@@ -453,16 +500,20 @@ onMounted(async () => {
             <strong>{{ getWeekLabel(group) }}</strong>
           </div>
           <div>
-            <span>有效累计金额</span>
-            <strong class="amount">{{ formatAmount(group.validCumulativeAmount) }}</strong>
+            <span>{{ getCumulativeAmountLabel(group) }}</span>
+            <strong class="amount">{{ formatAmount(getCumulativeAmount(group)) }}</strong>
           </div>
           <div>
-            <span>审核通过发票（可参与财务）</span>
-            <strong>{{ group.approvedInvoiceCount }} / {{ group.activeInvoiceCount }} 张</strong>
+            <span>当前预审完成</span>
+            <strong>{{ group.currentPreAuditCompletedInvoiceCount }} / {{ group.activeInvoiceCount }} 张</strong>
           </div>
           <div>
-            <span>凭证进度</span>
+            <span>周累计凭证</span>
             <strong>{{ getVoucherProgressLabel(group) }}</strong>
+          </div>
+          <div>
+            <span>财务提交资格</span>
+            <strong>{{ getFinanceEligibilityLabel(group) }}</strong>
           </div>
           <div>
             <span>报销进度</span>
@@ -471,9 +522,9 @@ onMounted(async () => {
         </div>
 
         <el-alert
-          v-if="group.submitBlockedReason"
+          v-if="group.submitBlockedReasons.length > 0"
           class="group-alert"
-          :title="group.submitBlockedReason"
+          :title="group.submitBlockedReasons.join('；')"
           type="warning"
           :closable="false"
           show-icon
@@ -513,11 +564,16 @@ onMounted(async () => {
                 {{ formatAmount(row.totalAmount) }}
               </template>
             </el-table-column>
-            <el-table-column label="资质审核" width="120">
+            <el-table-column label="预审状态" min-width="160">
               <template #default="{ row }">
-                <el-tag effect="plain">
-                  {{ getQualificationStatusLabel(row.qualificationStatus) }}
-                </el-tag>
+                <el-tooltip
+                  :content="row.preAuditStatusReason || ''"
+                  :disabled="!row.preAuditStatusReason"
+                >
+                  <el-tag effect="plain">
+                    {{ getPreAuditStatusLabel(row.preAuditStatus) }}
+                  </el-tag>
+                </el-tooltip>
               </template>
             </el-table-column>
             <el-table-column label="凭证状态" min-width="140">
@@ -769,7 +825,7 @@ onMounted(async () => {
 
 .group-metrics {
   display: grid;
-  grid-template-columns: 1.1fr repeat(4, 1fr);
+  grid-template-columns: 1.1fr repeat(5, 1fr);
   gap: 12px;
   margin-top: 20px;
   padding: 14px;

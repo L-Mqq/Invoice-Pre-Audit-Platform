@@ -124,6 +124,12 @@ async function findWeeklyVoucherProgress({
            ELSE 0
          END
        ) AS approved_invoice_count,
+       MAX(
+         CASE
+           WHEN wvr.status = 'pending' THEN wvr.triggered_cumulative_amount
+           ELSE NULL
+         END
+       ) AS pending_triggered_cumulative_amount,
        MAX(wvr.status = 'pending') AS has_pending_requirement,
        MAX(wvr.status = 'completed') AS has_completed_requirement
      FROM weekly_voucher_requirements wvr

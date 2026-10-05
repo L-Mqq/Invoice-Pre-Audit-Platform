@@ -1,6 +1,10 @@
 const invoiceRepository = require('../repositories/invoiceRepository')
 const invoiceFileRepository = require('../repositories/invoiceFileRepository')
 const {
+  getPreAuditStatus,
+  getPreAuditStatusReason,
+} = require('../utils/preAuditStatus')
+const {
   getManualProcessingContext,
 } = require('./invoiceDataValidationService')
 
@@ -63,36 +67,6 @@ function notFound(message) {
   return error
 }
 
-function getPreAuditStatus(row) {
-  if (
-    row.qualification_status === 'cancelled'
-    || row.qualification_status === 'rejected'
-    || row.qualification_status === 'pending_manual'
-  ) {
-    return row.qualification_status
-  }
-
-  if (row.pending_weekly_voucher_requirement_id) {
-    return Number(row.pending_weekly_voucher_approved) === 1
-      ? 'waiting_group_vouchers'
-      : 'pending_weekly_voucher'
-  }
-
-  return row.qualification_status
-}
-
-function getPreAuditStatusReason(row, preAuditStatus) {
-  if (preAuditStatus === 'pending_weekly_voucher') {
-    return '资质审核已通过；本自然周累计超过 1000 元，需补齐支付凭证'
-  }
-
-  if (preAuditStatus === 'waiting_group_vouchers') {
-    return '本票支付凭证已通过，等待组内其他关联发票完成凭证'
-  }
-
-  return row.qualification_reason
-}
-
 async function listInvoices(query = {}) {
   const page = parsePositiveInteger(query.page, 1)
   const pageSize = Math.min(parsePositiveInteger(query.pageSize, 20), 100)
@@ -118,7 +92,15 @@ async function listInvoices(query = {}) {
   })
   return {
     items: result.rows.map((row) => {
-      const preAuditStatus = getPreAuditStatus(row)
+      const weeklyVoucherStatus = row.pending_weekly_voucher_requirement_id
+        ? Number(row.pending_weekly_voucher_approved) === 1
+          ? 'approved'
+          : 'pending'
+        : null
+      const preAuditStatus = getPreAuditStatus({
+        qualificationStatus: row.qualification_status,
+        weeklyVoucherStatus,
+      })
 
       return {
         id: row.id,
@@ -131,12 +113,11 @@ async function listInvoices(query = {}) {
         qualificationStatus: row.qualification_status,
         qualificationReason: row.qualification_reason,
         preAuditStatus,
-        preAuditStatusReason: getPreAuditStatusReason(row, preAuditStatus),
-        weeklyVoucherStatus: row.pending_weekly_voucher_requirement_id
-          ? Number(row.pending_weekly_voucher_approved) === 1
-            ? 'approved'
-            : 'pending'
-          : 'not_required',
+        preAuditStatusReason: getPreAuditStatusReason({
+          qualificationReason: row.qualification_reason,
+          preAuditStatus,
+        }),
+        weeklyVoucherStatus: weeklyVoucherStatus || 'not_required',
         weeklyVoucherRequirementId: row.pending_weekly_voucher_requirement_id || null,
         cumulativeAmount: row.cumulative_amount,
         cumulativeWeekStart: row.cumulative_week_start,

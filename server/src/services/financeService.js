@@ -1,5 +1,9 @@
 const { pool } = require('../config/database')
 const financeRepository = require('../repositories/financeRepository')
+const {
+  getPreAuditStatus,
+  getPreAuditStatusReason,
+} = require('../utils/preAuditStatus')
 
 const BLOCKING_QUALIFICATION_STATUSES = new Set([
   'pending',
@@ -223,6 +227,10 @@ function createFinanceWeekGroup({
     voucherProgress: {
       requiredInvoiceCount: Number(voucherProgress?.required_invoice_count || 0),
       approvedInvoiceCount: Number(voucherProgress?.approved_invoice_count || 0),
+      triggeredCumulativeAmount: voucherProgress?.pending_triggered_cumulative_amount === null
+        || voucherProgress?.pending_triggered_cumulative_amount === undefined
+        ? null
+        : Number(voucherProgress.pending_triggered_cumulative_amount),
       hasCompletedRequirement: Number(voucherProgress?.has_completed_requirement || 0) === 1,
       hasPendingRequirement: Number(voucherProgress?.has_pending_requirement || 0) === 1,
     },
@@ -287,25 +295,55 @@ function serializeFinanceWeekGroup({
     && group.submittedApprovedInvoiceCount === group.approvedInvoiceCount
     ? 'submitted'
     : 'not_submitted'
-  let submitBlockedReason = null
+  const submitBlockedReasons = []
 
   if (financeStatus === 'not_submitted') {
     if (!isWeekCompleted({ cumulativeWeekStart: group.weekStart, now })) {
-      submitBlockedReason = '该自然周尚未结束，请于下一周周一后提交财务'
+      submitBlockedReasons.push('该自然周尚未结束，请于下一周周一后提交财务')
+    }
+
+    if (group.voucherProgress.hasPendingRequirement) {
+      const pendingVoucherCount = group.voucherProgress.requiredInvoiceCount
+        - group.voucherProgress.approvedInvoiceCount
+
+      submitBlockedReasons.push(
+        `周累计凭证尚有 ${pendingVoucherCount} 张未完成`,
+      )
     } else if (group.pendingInvoiceCount > 0) {
-      submitBlockedReason = `组内仍有 ${group.pendingInvoiceCount} 张发票待审核或待补凭证`
-    } else if (group.voucherProgress.hasPendingRequirement) {
-      submitBlockedReason = '该自然周存在未完成的周累计凭证补齐任务'
-    } else if (group.approvedInvoiceCount === 0) {
-      submitBlockedReason = '该自然周没有可提交财务的审核通过发票'
-    } else if (group.invalidSnapshotCount > 0) {
-      submitBlockedReason = '存在自然周审核快照异常的发票，请先重新审核'
-    } else if (group.submittedApprovedInvoiceCount > 0) {
-      submitBlockedReason = '存在已进入财务流程的发票，请人工处理该异常组'
-    } else if (validCumulativeAmount > 3000) {
-      submitBlockedReason = '该自然周审核通过发票累计金额超过 3000 元，不能提交财务'
+      submitBlockedReasons.push(
+        `组内仍有 ${group.pendingInvoiceCount} 张发票待审核或待补凭证`,
+      )
+    }
+
+    if (group.approvedInvoiceCount === 0) {
+      submitBlockedReasons.push('该自然周没有可提交财务的审核通过发票')
+    }
+
+    if (group.invalidSnapshotCount > 0) {
+      submitBlockedReasons.push('存在自然周审核快照异常的发票，请先重新审核')
+    }
+
+    if (group.submittedApprovedInvoiceCount > 0) {
+      submitBlockedReasons.push('存在已进入财务流程的发票，请人工处理该异常组')
+    }
+
+    if (validCumulativeAmount > 3000) {
+      submitBlockedReasons.push('该自然周审核通过发票累计金额超过 3000 元，不能提交财务')
     }
   }
+
+  const currentPreAuditCompletedInvoiceCount = group.voucherProgress.hasPendingRequirement
+    ? 0
+    : group.approvedInvoiceCount
+  const canSubmitFinance = financeStatus === 'not_submitted'
+    && submitBlockedReasons.length === 0
+  const groupProcessingStatus = financeStatus === 'submitted'
+    ? 'submitted'
+    : group.voucherProgress.hasPendingRequirement
+      ? 'pending_weekly_voucher'
+      : canSubmitFinance
+        ? 'ready_for_finance'
+        : 'waiting'
 
   return {
     sellerName: group.sellerName,
@@ -319,11 +357,14 @@ function serializeFinanceWeekGroup({
     rejectedInvoiceCount: group.rejectedInvoiceCount,
     cancelledInvoiceCount: group.cancelledInvoiceCount,
     validCumulativeAmount,
+    currentPreAuditCompletedInvoiceCount,
     voucherProgress: group.voucherProgress,
     financeStatus,
+    groupProcessingStatus,
     reimbursementSummary: group.reimbursementSummary,
-    canSubmitFinance: financeStatus === 'not_submitted' && !submitBlockedReason,
-    submitBlockedReason,
+    canSubmitFinance,
+    submitBlockedReason: submitBlockedReasons[0] || null,
+    submitBlockedReasons,
   }
 }
 
@@ -336,10 +377,14 @@ function getVoucherStatus(invoice) {
     }
   }
 
-  if (
-    invoice.weekly_voucher_status === 'approved'
-    || Number(invoice.has_approved_complete_voucher_group) === 1
-  ) {
+  if (invoice.weekly_voucher_status === 'approved') {
+    return {
+      code: 'approved',
+      label: '本票凭证已通过，等待组内凭证',
+    }
+  }
+
+  if (Number(invoice.has_approved_complete_voucher_group) === 1) {
     return {
       code: 'approved',
       label: '凭证已通过',
@@ -386,17 +431,29 @@ async function getFinanceWeekInvoices({
     sellerTaxId: normalizedSellerTaxId,
     weekStart: normalizedWeekStart,
     weekEnd: getWeekEnd(normalizedWeekStart),
-    items: invoices.map((invoice) => ({
-      id: invoice.id,
-      invoiceNumber: invoice.invoice_number,
-      totalAmount: Number(invoice.total_amount),
-      submittedAt: invoice.submitted_at,
-      qualificationStatus: invoice.qualification_status,
-      qualificationReason: invoice.qualification_reason,
-      voucherStatus: getVoucherStatus(invoice),
-      financeStatus: invoice.finance_status,
-      reimbursementStatus: invoice.reimbursement_status,
-    })),
+    items: invoices.map((invoice) => {
+      const preAuditStatus = getPreAuditStatus({
+        qualificationStatus: invoice.qualification_status,
+        weeklyVoucherStatus: invoice.weekly_voucher_status,
+      })
+
+      return {
+        id: invoice.id,
+        invoiceNumber: invoice.invoice_number,
+        totalAmount: Number(invoice.total_amount),
+        submittedAt: invoice.submitted_at,
+        qualificationStatus: invoice.qualification_status,
+        qualificationReason: invoice.qualification_reason,
+        preAuditStatus,
+        preAuditStatusReason: getPreAuditStatusReason({
+          qualificationReason: invoice.qualification_reason,
+          preAuditStatus,
+        }),
+        voucherStatus: getVoucherStatus(invoice),
+        financeStatus: invoice.finance_status,
+        reimbursementStatus: invoice.reimbursement_status,
+      }
+    }),
   }
 }
 
