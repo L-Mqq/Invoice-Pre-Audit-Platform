@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import type { InvoiceDetailFile } from '../../../apis/invoices'
+import {
+  getExtractionStatusLabel,
+  getExtractionStatusType,
+} from '../../../utils/status'
 
 defineProps<{
   files: InvoiceDetailFile[]
@@ -13,25 +17,6 @@ const emit = defineEmits<{
   'update:selectedFileId': [fileId: number]
 }>()
 
-function getExtractionStatusLabel(status: InvoiceDetailFile['extractionStatus']): string {
-  const labels = {
-    pending: '处理中',
-    success: '解析成功',
-    failed: '解析失败',
-  }
-
-  return labels[status]
-}
-
-function getExtractionStatusType(status: InvoiceDetailFile['extractionStatus']) {
-  const types = {
-    pending: 'warning',
-    success: 'success',
-    failed: 'danger',
-  } as const
-
-  return types[status]
-}
 </script>
 
 <template>
@@ -110,7 +95,7 @@ function getExtractionStatusType(status: InvoiceDetailFile['extractionStatus']) 
           :type="getExtractionStatusType(file.extractionStatus)"
           effect="plain"
         >
-          {{ getExtractionStatusLabel(file.extractionStatus) }}
+          文件处理：{{ getExtractionStatusLabel(file.extractionStatus) }}
         </el-tag>
       </div>
     </template>

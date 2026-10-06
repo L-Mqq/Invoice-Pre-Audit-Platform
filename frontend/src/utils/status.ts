@@ -29,6 +29,18 @@ const reimbursementStatusLabels: Record<string, string> = {
   failed: '报销失败',
 }
 
+const extractionStatusLabels: Record<string, string> = {
+  pending: '处理中',
+  success: '已完成',
+  failed: '处理失败',
+}
+
+const extractionStatusTypes: Record<string, 'warning' | 'success' | 'danger'> = {
+  pending: 'warning',
+  success: 'success',
+  failed: 'danger',
+}
+
 function getStatusLabel(
   labels: Record<string, string>,
   value: string | null | undefined,
@@ -59,4 +71,20 @@ export function getReimbursementStatusLabel(
   value: string | null | undefined,
 ) {
   return getStatusLabel(reimbursementStatusLabels, value)
+}
+
+export function getExtractionStatusLabel(
+  value: string | null | undefined,
+) {
+  return getStatusLabel(extractionStatusLabels, value)
+}
+
+export function getExtractionStatusType(
+  value: string | null | undefined,
+) {
+  if (!value) {
+    return 'info'
+  }
+
+  return extractionStatusTypes[value] || 'info'
 }

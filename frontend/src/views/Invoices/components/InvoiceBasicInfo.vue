@@ -7,6 +7,10 @@ import {
   formatChinaDate,
   formatChinaDateTime,
 } from '../../../utils/date'
+import {
+  getExtractionStatusLabel,
+  getExtractionStatusType,
+} from '../../../utils/status'
 
 defineProps<{
   invoice: InvoiceDetail
@@ -17,25 +21,6 @@ function formatAmount(amount: number | string | null): string {
   return `¥${Number(amount || 0).toFixed(2)}`
 }
 
-function getExtractionStatusLabel(status: InvoiceDetailFile['extractionStatus']): string {
-  const labels = {
-    pending: '处理中',
-    success: '解析成功',
-    failed: '解析失败',
-  }
-
-  return labels[status]
-}
-
-function getExtractionStatusType(status: InvoiceDetailFile['extractionStatus']) {
-  const types = {
-    pending: 'warning',
-    success: 'success',
-    failed: 'danger',
-  } as const
-
-  return types[status]
-}
 </script>
 
 <template>
@@ -49,7 +34,7 @@ function getExtractionStatusType(status: InvoiceDetailFile['extractionStatus']) 
         :type="selectedFile ? getExtractionStatusType(selectedFile.extractionStatus) : 'info'"
         effect="plain"
       >
-        {{ selectedFile ? getExtractionStatusLabel(selectedFile.extractionStatus) : '无关联文件' }}
+        文件处理：{{ selectedFile ? getExtractionStatusLabel(selectedFile.extractionStatus) : '无关联文件' }}
       </el-tag>
     </div>
 

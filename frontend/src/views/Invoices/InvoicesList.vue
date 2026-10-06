@@ -50,9 +50,13 @@ const loadError = ref('')
 
 const filteredInvoices = computed(() => invoices.value)
 
-const successCount = computed(() => {
+const voucherPendingCount = computed(() => {
   return invoices.value.filter((invoice) => {
-    return invoice.file?.extractionStatus === 'success'
+    return [
+      'pending_voucher',
+      'pending_weekly_voucher',
+      'waiting_group_vouchers',
+    ].includes(invoice.preAuditStatus)
   }).length
 })
 
@@ -62,6 +66,9 @@ const pendingCount = computed(() => {
       'approved',
       'rejected',
       'cancelled',
+      'pending_voucher',
+      'pending_weekly_voucher',
+      'waiting_group_vouchers',
     ].includes(invoice.preAuditStatus)
   }).length
 })
@@ -194,10 +201,10 @@ onMounted(loadInvoices)
         <strong>{{ total }}</strong>
         <small>当前查询范围</small>
       </div>
-      <div class="summary-card success">
-        <span>解析成功</span>
-        <strong>{{ successCount }}</strong>
-        <small>可进入预审流程</small>
+      <div class="summary-card warning">
+        <span>待补凭证</span>
+        <strong>{{ voucherPendingCount }}</strong>
+        <small>当前页需要补充凭证</small>
       </div>
       <div class="summary-card warning">
         <span>待处理</span>
@@ -330,27 +337,6 @@ onMounted(loadInvoices)
         >
           <template #default="{ row }">
             {{ formatChinaDate(row.invoiceDate) || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column
-          label="提取状态"
-          width="110"
-        >
-          <template #default="{ row }">
-            <el-tag
-              :type="row.file?.extractionStatus === 'success'
-                ? 'success'
-                : row.file?.extractionStatus === 'failed'
-                  ? 'danger'
-                  : 'warning'"
-              effect="plain"
-            >
-              {{ row.file?.extractionStatus === 'success'
-                ? '成功'
-                : row.file?.extractionStatus === 'failed'
-                  ? '失败'
-                  : '处理中' }}
-            </el-tag>
           </template>
         </el-table-column>
         <el-table-column

@@ -4,6 +4,8 @@ import { useUploadBatchStore } from '../../stores/uploadBatch'
 import { previewInvoiceFile } from '../../apis/invoiceFile'
 import {
   getFinanceStatusLabel,
+  getExtractionStatusLabel,
+  getExtractionStatusType,
   getQualificationStatusLabel,
   getReimbursementStatusLabel,
 } from '../../utils/status'
@@ -201,14 +203,14 @@ async function startUpload() {
       </el-card>
       <el-card class="result-card" shadow="never">
         <div class="card-title"><h2>批次结果</h2><el-tag v-if="isUploading" type="warning">处理中</el-tag><el-tag v-else-if="(hasFiles || hasBatch) && successCount + failedCount === totalCount" :type="failedCount ? 'danger' : 'success'">{{ failedCount ? '部分失败' : '已完成' }}</el-tag><el-tag v-else type="info">未开始</el-tag></div>
-        <div class="metrics"><div><strong>{{ totalCount }}</strong><span>文件总数</span></div><div class="success"><strong>{{ successCount }}</strong><span>解析成功</span></div><div class="failed"><strong>{{ failedCount }}</strong><span>解析失败</span></div></div>
-        <el-alert v-if="failedCount" title="部分文件未能完成解析" type="warning" :closable="false" show-icon description="请检查失败原因，修正文件后重新上传。" />
+        <div class="metrics"><div><strong>{{ totalCount }}</strong><span>文件总数</span></div><div class="success"><strong>{{ successCount }}</strong><span>文件处理完成</span></div><div class="failed"><strong>{{ failedCount }}</strong><span>文件处理失败</span></div></div>
+        <el-alert v-if="failedCount" title="部分文件未能完成处理" type="warning" :closable="false" show-icon description="请检查失败原因，修正文件后重新上传。" />
         <div v-else-if="!hasBatch" class="empty-result"><div class="empty-icon">✓</div><strong>上传后查看处理结果</strong><p>系统会逐个提取发票信息，并根据商品单价规则生成预审结果。</p></div>
         <div v-else-if="hasBatch" class="batch-files">
           <div class="batch-files-title"><strong>最近上传文件</strong><span>{{ batchFiles.length }} 个文件</span></div>
           <div class="batch-file-list">
             <article v-for="file in batchFiles" :key="file.id" class="batch-file-item">
-              <div class="batch-file-header"><strong>{{ file.originalName }}</strong><div class="batch-file-actions"><el-tag :type="file.extractionStatus === 'success' ? 'success' : file.extractionStatus === 'failed' ? 'danger' : 'warning'" effect="plain">{{ file.extractionStatus === 'success' ? '解析成功' : file.extractionStatus === 'failed' ? '解析失败' : '处理中' }}</el-tag><el-button v-if="file.originalName.toLowerCase().endsWith('.pdf')" link type="primary" :loading="previewLoading && previewName === file.originalName" @click="openPreview(file.id, file.originalName)">预览</el-button></div></div>
+              <div class="batch-file-header"><strong>{{ file.originalName }}</strong><div class="batch-file-actions"><el-tag :type="getExtractionStatusType(file.extractionStatus)" effect="plain">{{ getExtractionStatusLabel(file.extractionStatus) }}</el-tag><el-button v-if="file.originalName.toLowerCase().endsWith('.pdf')" link type="primary" :loading="previewLoading && previewName === file.originalName" @click="openPreview(file.id, file.originalName)">预览</el-button></div></div>
               <p v-if="file.extractionError" class="batch-file-error">{{ file.extractionError }}</p>
               <template v-else-if="file.invoice">
                 <div class="invoice-summary"><span>发票号码：{{ file.invoice.invoiceNumber || '未识别' }}</span><span>销售方：{{ file.invoice.sellerName || '未识别' }}</span><span>价税合计：{{ file.invoice.totalAmount ?? '-' }} 元</span></div>
