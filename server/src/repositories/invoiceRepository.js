@@ -70,9 +70,7 @@ async function findItemsByInvoiceIds(invoiceIds) {
   return rows
 }
 
-async function findPage({
-  page,
-  pageSize,
+function buildPageQuery({
   qualificationStatus,
   preAuditStatus,
   financeStatus,
@@ -148,10 +146,76 @@ async function findPage({
     conditions.push('i.invoice_number LIKE ?')
     params.push(`%${invoiceNumber}%`)
   }
-  const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''
+
+  return {
+    pendingWeeklyVoucherJoin,
+    params,
+    whereClause: conditions.length
+      ? `WHERE ${conditions.join(' AND ')}`
+      : '',
+  }
+}
+
+async function findPage({
+  page,
+  pageSize,
+  qualificationStatus,
+  preAuditStatus,
+  financeStatus,
+  reimbursementStatus,
+  sellerName,
+  invoiceNumber,
+}) {
+  const {
+    pendingWeeklyVoucherJoin,
+    params,
+    whereClause,
+  } = buildPageQuery({
+    qualificationStatus,
+    preAuditStatus,
+    financeStatus,
+    reimbursementStatus,
+    sellerName,
+    invoiceNumber,
+  })
   const offset = (page - 1) * pageSize
-  const [countRows] = await pool.execute(
-    `SELECT COUNT(*) AS total
+  const preAuditStatusExpression = `
+    CASE
+      WHEN i.qualification_status IN ('cancelled', 'rejected', 'pending_manual')
+        THEN i.qualification_status
+      WHEN pending_weekly_voucher.requirement_id IS NOT NULL
+       AND pending_weekly_voucher.voucher_approved = 1
+        THEN 'waiting_group_vouchers'
+      WHEN pending_weekly_voucher.requirement_id IS NOT NULL
+        THEN 'pending_weekly_voucher'
+      ELSE i.qualification_status
+    END
+  `
+  const [summaryRows] = await pool.execute(
+    `SELECT
+       COUNT(*) AS total,
+       COALESCE(SUM(
+         CASE
+           WHEN ${preAuditStatusExpression} IN (
+             'pending_voucher',
+             'pending_weekly_voucher',
+             'waiting_group_vouchers'
+           ) THEN 1
+           ELSE 0
+         END
+       ), 0) AS pending_voucher_count,
+       COALESCE(SUM(
+         CASE
+           WHEN ${preAuditStatusExpression} IN ('pending', 'pending_manual') THEN 1
+           ELSE 0
+         END
+       ), 0) AS pending_count,
+       COALESCE(SUM(
+         CASE
+           WHEN ${preAuditStatusExpression} = 'approved' THEN 1
+           ELSE 0
+         END
+       ), 0) AS approved_count
      FROM invoices i
      ${pendingWeeklyVoucherJoin}
      ${whereClause}`,
@@ -189,9 +253,17 @@ async function findPage({
      LIMIT ? OFFSET ?`,
     [...params, pageSize, offset],
   )
+
+  const summaryRow = summaryRows[0] || {}
+
   return {
     rows,
-    total: Number(countRows[0]?.total || 0),
+    summary: {
+      total: Number(summaryRow.total || 0),
+      pendingVoucherCount: Number(summaryRow.pending_voucher_count || 0),
+      pendingCount: Number(summaryRow.pending_count || 0),
+      approvedCount: Number(summaryRow.approved_count || 0),
+    },
   }
 }
 

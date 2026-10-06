@@ -139,9 +139,10 @@ async function listInvoices(query = {}) {
     pagination: {
       page,
       pageSize,
-      total: result.total,
-      totalPages: Math.ceil(result.total / pageSize),
+      total: result.summary.total,
+      totalPages: Math.ceil(result.summary.total / pageSize),
     },
+    summary: result.summary,
   }
 }
 

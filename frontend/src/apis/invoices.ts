@@ -59,6 +59,12 @@ export interface InvoiceListResponse {
     total: number
     totalPages: number
   }
+  summary: {
+    total: number
+    pendingVoucherCount: number
+    pendingCount: number
+    approvedCount: number
+  }
 }
 
 export interface InvoiceDetailItem {

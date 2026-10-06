@@ -47,37 +47,14 @@ const pageSize = ref(10)
 const total = ref(0)
 const loading = ref(false)
 const loadError = ref('')
+const summary = ref({
+  total: 0,
+  pendingVoucherCount: 0,
+  pendingCount: 0,
+  approvedCount: 0,
+})
 
 const filteredInvoices = computed(() => invoices.value)
-
-const voucherPendingCount = computed(() => {
-  return invoices.value.filter((invoice) => {
-    return [
-      'pending_voucher',
-      'pending_weekly_voucher',
-      'waiting_group_vouchers',
-    ].includes(invoice.preAuditStatus)
-  }).length
-})
-
-const pendingCount = computed(() => {
-  return invoices.value.filter((invoice) => {
-    return ![
-      'approved',
-      'rejected',
-      'cancelled',
-      'pending_voucher',
-      'pending_weekly_voucher',
-      'waiting_group_vouchers',
-    ].includes(invoice.preAuditStatus)
-  }).length
-})
-
-const approvedCount = computed(() => {
-  return invoices.value.filter((invoice) => {
-    return invoice.preAuditStatus === 'approved'
-  }).length
-})
 
 function resetFilters() {
   searchForm.value = {
@@ -142,6 +119,7 @@ async function loadInvoices() {
 
     invoices.value = result.items
     total.value = result.pagination.total
+    summary.value = result.summary
   } catch (error) {
     loadError.value = error instanceof Error
       ? error.message
@@ -198,23 +176,23 @@ onMounted(loadInvoices)
     <div class="summary-grid">
       <div class="summary-card">
         <span>发票总数</span>
-        <strong>{{ total }}</strong>
+        <strong>{{ summary.total }}</strong>
         <small>当前查询范围</small>
       </div>
       <div class="summary-card warning">
         <span>待补凭证</span>
-        <strong>{{ voucherPendingCount }}</strong>
-        <small>当前页需要补充凭证</small>
+        <strong>{{ summary.pendingVoucherCount }}</strong>
+        <small>当前查询范围需要补充凭证</small>
       </div>
       <div class="summary-card warning">
         <span>待处理</span>
-        <strong>{{ pendingCount }}</strong>
-        <small>等待管理员处理</small>
+        <strong>{{ summary.pendingCount }}</strong>
+        <small>当前查询范围等待管理员处理</small>
       </div>
       <div class="summary-card approved">
         <span>预审通过</span>
-        <strong>{{ approvedCount }}</strong>
-        <small>无待完成凭证任务</small>
+        <strong>{{ summary.approvedCount }}</strong>
+        <small>当前查询范围预审通过</small>
       </div>
     </div>
 
