@@ -136,6 +136,7 @@ async function findInvoiceForQualificationReview({
   const [rows] = await connection.execute(
     `SELECT
        id,
+       invoice_number,
        invoice_date,
        seller_name,
        seller_tax_id,

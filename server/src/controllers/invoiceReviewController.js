@@ -86,10 +86,30 @@ async function reviewInvoiceQualification(req, res, next) {
   }
 }
 
+// 管理员确认疑似重复发票。
+async function reviewInvoiceDuplicate(req, res, next) {
+  try {
+    const result = await invoiceReviewService.reviewInvoiceDuplicate({
+      invoiceId: req.params.invoiceId,
+      decision: req.body?.decision,
+      note: req.body?.note,
+      operatorId: req.user.id,
+    })
+
+    res.json({
+      success: true,
+      data: result,
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
 module.exports = {
   reviewItemCategory,
   updateInvoiceManualData,
   submitInvoiceForReview,
   getInvoiceQualificationPreview,
   reviewInvoiceQualification,
+  reviewInvoiceDuplicate,
 }

@@ -26,5 +26,10 @@ router.patch(
   '/invoices/:invoiceId/qualification',
   controller.reviewInvoiceQualification,
 )
+// 管理员确认疑似重复发票。
+router.patch(
+  '/invoices/:invoiceId/duplicate-review',
+  controller.reviewInvoiceDuplicate,
+)
 
 module.exports = router

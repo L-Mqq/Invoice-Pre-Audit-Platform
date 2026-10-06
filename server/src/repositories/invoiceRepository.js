@@ -53,6 +53,88 @@ async function createItems({ connection = pool, invoiceId, items }) {
   return createdItems
 }
 
+// 以销售方税号和发票号码进行基础重复检测；已取消记录不再作为有效重复依据。
+async function findDuplicateInvoice({
+  connection = pool,
+  invoiceId,
+  sellerTaxId,
+  invoiceNumber,
+}) {
+  if (!sellerTaxId || !invoiceNumber) {
+    return null
+  }
+
+  const [rows] = await connection.execute(
+    `SELECT
+       id,
+       invoice_number,
+       seller_name,
+       seller_tax_id,
+       total_amount,
+       qualification_status
+     FROM invoices
+     WHERE seller_tax_id = ?
+       AND invoice_number = ?
+       AND id <> ?
+       AND qualification_status <> 'cancelled'
+     ORDER BY id ASC
+     LIMIT 1`,
+    [
+      sellerTaxId,
+      invoiceNumber,
+      invoiceId,
+    ],
+  )
+
+  return rows[0] || null
+}
+
+async function markSuspectedDuplicate({
+  connection = pool,
+  invoiceId,
+  qualificationReason,
+}) {
+  await connection.execute(
+    `UPDATE invoices
+     SET qualification_status = 'pending_manual',
+         qualification_reason = ?
+     WHERE id = ?`,
+    [
+      qualificationReason,
+      invoiceId,
+    ],
+  )
+}
+
+async function createOperationLog({
+  connection = pool,
+  operatorId = null,
+  operationType,
+  resourceId,
+  beforeData,
+  afterData,
+}) {
+  await connection.execute(
+    `INSERT INTO operation_logs
+      (
+        operator_id,
+        operation_type,
+        resource_type,
+        resource_id,
+        before_data,
+        after_data
+      )
+     VALUES (?, ?, 'invoice', ?, ?, ?)`,
+    [
+      operatorId,
+      operationType,
+      resourceId,
+      JSON.stringify(beforeData),
+      JSON.stringify(afterData),
+    ],
+  )
+}
+
 // 新增按多个 invoiceId 批量查询商品明细；
 async function findItemsByInvoiceIds(invoiceIds) {
   if (!Array.isArray(invoiceIds) || invoiceIds.length === 0) return []
@@ -385,6 +467,9 @@ module.exports = {
   createDraft,
   updateExtractionResult,
   createItems,
+  findDuplicateInvoice,
+  markSuspectedDuplicate,
+  createOperationLog,
   findItemsByInvoiceIds,
   findPage,
   findById,

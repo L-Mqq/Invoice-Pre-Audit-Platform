@@ -18,6 +18,9 @@ const { validateInvoiceExtraction } = require('../validators/invoiceExtractionVa
 const { judgeItems } = require('./categoryJudgmentService')
 const { judgePriceItems } = require('./priceJudgmentService')
 const { getExtractionConfig } = require('../config/extraction')
+const {
+  buildSuspectedDuplicateReason,
+} = require('../utils/duplicateInvoice')
 
 function badRequest(message) {
   const error = new Error(message)
@@ -137,6 +140,40 @@ async function createUploadBatch({ files, createdBy = null }) {
               priceResult: priceJudgment.invoicePriceResult,
               reason: priceJudgment.reason,
             })
+
+            const duplicateInvoice = await invoiceRepository.findDuplicateInvoice({
+              connection: resultConnection,
+              invoiceId: storedFile.invoiceId,
+              sellerTaxId: extraction.structured.data.sellerTaxId,
+              invoiceNumber: extraction.structured.data.invoiceNumber,
+            })
+
+            if (duplicateInvoice) {
+              const qualificationReason = buildSuspectedDuplicateReason({
+                duplicateInvoiceId: duplicateInvoice.id,
+              })
+
+              await invoiceRepository.markSuspectedDuplicate({
+                connection: resultConnection,
+                invoiceId: storedFile.invoiceId,
+                qualificationReason,
+              })
+
+              await invoiceRepository.createOperationLog({
+                connection: resultConnection,
+                operationType: 'duplicate_detected',
+                resourceId: storedFile.invoiceId,
+                beforeData: {
+                  duplicateInvoiceId: duplicateInvoice.id,
+                },
+                afterData: {
+                  qualificationStatus: 'pending_manual',
+                  qualificationReason,
+                  duplicateInvoiceId: duplicateInvoice.id,
+                  duplicateRule: 'seller_tax_id_and_invoice_number',
+                },
+              })
+            }
           }
           await invoiceFileRepository.updateExtractionStatus({ connection: resultConnection, id: storedFile.id, status: 'success' })
           await resultConnection.commit()

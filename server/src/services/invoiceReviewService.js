@@ -12,11 +12,19 @@ const {
   toDataIssues,
   validateStoredInvoiceData,
 } = require('./invoiceDataValidationService')
+const {
+  getSuspectedDuplicateInvoiceId,
+  isSuspectedDuplicateReason,
+} = require('../utils/duplicateInvoice')
 
 const ALLOWED_RESULTS = new Set(['可以', '存疑', '不可以'])
 const QUALIFICATION_ACTIONS = new Set([
   'execute_rules',
   'abandon',
+])
+const DUPLICATE_REVIEW_DECISIONS = new Set([
+  'duplicate',
+  'not_duplicate',
 ])
 const ABANDONABLE_QUALIFICATION_STATUSES = new Set([
   'pending',
@@ -1250,10 +1258,163 @@ async function reviewInvoiceQualification({
   }
 }
 
+// 管理员确认疑似重复发票：确认重复则取消，确认非重复则恢复正常预审流程。
+async function reviewInvoiceDuplicate({
+  invoiceId,
+  decision,
+  note,
+  operatorId,
+}) {
+  const normalizedInvoiceId = parsePositiveInteger(invoiceId, 'invoiceId')
+  const normalizedOperatorId = parsePositiveInteger(operatorId, 'operatorId')
+
+  if (!DUPLICATE_REVIEW_DECISIONS.has(decision)) {
+    throw createHttpError(400, 'decision 无效')
+  }
+
+  const normalizedNote = validateNote(note, decision)
+  const connection = await pool.getConnection()
+
+  try {
+    await connection.beginTransaction()
+
+    const invoice = await invoiceReviewRepository.findInvoiceForQualificationReview({
+      connection,
+      invoiceId: normalizedInvoiceId,
+    })
+
+    if (!invoice) {
+      throw createHttpError(404, '发票不存在')
+    }
+
+    if (
+      invoice.qualification_status !== 'pending_manual'
+      || !isSuspectedDuplicateReason(invoice.qualification_reason)
+    ) {
+      throw createHttpError(409, '当前发票不是待确认的疑似重复发票')
+    }
+
+    if (
+      invoice.finance_status !== 'not_submitted'
+      || invoice.reimbursement_status !== 'not_completed'
+    ) {
+      throw createHttpError(409, '已进入财务或报销流程的发票不能进行重复判定')
+    }
+
+    const duplicateInvoiceId = getSuspectedDuplicateInvoiceId(
+      invoice.qualification_reason,
+    )
+    const beforeData = {
+      qualificationStatus: invoice.qualification_status,
+      qualificationReason: invoice.qualification_reason,
+      cumulativeAmount: invoice.cumulative_amount,
+      cumulativeWeekStart: invoice.cumulative_week_start,
+      submittedAt: invoice.submitted_at,
+      duplicateInvoiceId,
+    }
+    let result
+
+    if (decision === 'duplicate') {
+      result = {
+        qualificationStatus: 'cancelled',
+        qualificationReason: normalizedNote
+          ? `【重复发票】已确认与发票 #${duplicateInvoiceId || '未知'} 重复：${normalizedNote}`
+          : `【重复发票】已确认与发票 #${duplicateInvoiceId || '未知'} 重复，已取消`,
+        cumulativeAmount: invoice.cumulative_amount,
+        cumulativeWeekStart: invoice.cumulative_week_start,
+        submittedAt: invoice.submitted_at,
+      }
+    } else if (invoice.submitted_at) {
+      const items = await invoiceReviewRepository.findItemsForQualificationReview({
+        connection,
+        invoiceId: normalizedInvoiceId,
+      })
+      const manualProcessing = getManualProcessingContext({
+        invoice,
+        items,
+      })
+
+      if (manualProcessing.completionRequired) {
+        throw createHttpError(
+          409,
+          `资料待补全，不能继续预审：${getDataIssueReason(manualProcessing.dataIssues)}`,
+        )
+      }
+
+      result = await resolveApprovalDecision({
+        connection,
+        invoice,
+        items,
+      })
+    } else {
+      result = {
+        qualificationStatus: 'pending',
+        qualificationReason: normalizedNote
+          ? `已确认非重复：${normalizedNote}；等待提交审核`
+          : '已确认非重复，等待提交审核',
+        cumulativeAmount: null,
+        cumulativeWeekStart: null,
+        submittedAt: null,
+      }
+    }
+
+    await invoiceReviewRepository.updateInvoiceQualificationReview({
+      connection,
+      invoiceId: normalizedInvoiceId,
+      qualificationStatus: result.qualificationStatus,
+      qualificationReason: result.qualificationReason,
+      cumulativeAmount: result.cumulativeAmount,
+      cumulativeWeekStart: result.cumulativeWeekStart,
+      submittedAt: result.submittedAt,
+      manualNote: invoice.manual_note,
+    })
+
+    const afterData = {
+      decision,
+      qualificationStatus: result.qualificationStatus,
+      qualificationReason: result.qualificationReason,
+      cumulativeAmount: result.cumulativeAmount,
+      cumulativeWeekStart: result.cumulativeWeekStart,
+      submittedAt: result.submittedAt || invoice.submitted_at,
+      duplicateInvoiceId,
+    }
+
+    await invoiceReviewRepository.createQualificationReviewLog({
+      connection,
+      operatorId: normalizedOperatorId,
+      invoiceId: normalizedInvoiceId,
+      beforeData,
+      afterData,
+      operationType: decision === 'duplicate'
+        ? 'duplicate_confirmed'
+        : 'duplicate_cleared',
+    })
+
+    await connection.commit()
+
+    return {
+      id: normalizedInvoiceId,
+      decision,
+      duplicateInvoiceId,
+      qualificationStatus: result.qualificationStatus,
+      qualificationReason: result.qualificationReason,
+      cumulativeAmount: result.cumulativeAmount,
+      cumulativeWeekStart: result.cumulativeWeekStart,
+      submittedAt: result.submittedAt || invoice.submitted_at,
+    }
+  } catch (error) {
+    await connection.rollback()
+    throw error
+  } finally {
+    connection.release()
+  }
+}
+
 module.exports = {
   reviewItemCategory,
   updateInvoiceManualData,
   submitInvoiceForReview,
   getInvoiceQualificationPreview,
   reviewInvoiceQualification,
+  reviewInvoiceDuplicate,
 }
