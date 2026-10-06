@@ -82,6 +82,7 @@ export interface InvoiceQualificationPreview {
 }
 
 export interface ManualInvoiceData {
+  invoiceNumber?: string | null
   sellerName?: string | null
   sellerTaxId?: string | null
   invoiceDate?: string | null

@@ -12,13 +12,20 @@ import {
   getExtractionStatusType,
 } from '../../../utils/status'
 
-defineProps<{
+const props = defineProps<{
   invoice: InvoiceDetail
   selectedFile: InvoiceDetailFile | null
 }>()
 
 function formatAmount(amount: number | string | null): string {
   return `¥${Number(amount || 0).toFixed(2)}`
+}
+
+function isInvoiceNumberMissing(): boolean {
+  return props.invoice.dataIssues.some((issue) => {
+    return issue.scope === 'invoice'
+      && issue.field === 'invoiceNumber'
+  })
 }
 
 </script>
@@ -30,12 +37,21 @@ function formatAmount(amount: number | string | null): string {
   >
     <div class="card-title">
       <h2>发票基础信息</h2>
-      <el-tag
-        :type="selectedFile ? getExtractionStatusType(selectedFile.extractionStatus) : 'info'"
-        effect="plain"
-      >
-        文件处理：{{ selectedFile ? getExtractionStatusLabel(selectedFile.extractionStatus) : '无关联文件' }}
-      </el-tag>
+      <div class="card-tags">
+        <el-tag
+          :type="selectedFile ? getExtractionStatusType(selectedFile.extractionStatus) : 'info'"
+          effect="plain"
+        >
+          文件处理：{{ selectedFile ? getExtractionStatusLabel(selectedFile.extractionStatus) : '无关联文件' }}
+        </el-tag>
+        <el-tag
+          v-if="isInvoiceNumberMissing()"
+          type="warning"
+          effect="plain"
+        >
+          发票号码待补全
+        </el-tag>
+      </div>
     </div>
 
     <div class="info-grid">
@@ -92,6 +108,13 @@ function formatAmount(amount: number | string | null): string {
 .card-title h2 {
   margin: 0;
   font-size: 17px;
+}
+
+.card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .info-grid {

@@ -80,6 +80,13 @@ function getReviewStatusLabel(invoice: InvoiceDetail): string {
   return getQualificationStatusLabel(invoice.qualificationStatus)
 }
 
+function isInvoiceNumberMissing(invoice: InvoiceDetail): boolean {
+  return invoice.dataIssues.some((issue) => {
+    return issue.scope === 'invoice'
+      && issue.field === 'invoiceNumber'
+  })
+}
+
 // 品类的样式
 function getReviewStatusType(
   invoice: InvoiceDetail,
@@ -236,7 +243,12 @@ function getWeeklyVoucherRequirementDescription(
       </div>
       <div v-else-if="invoice.canManualCompleteData">
         <strong>资料待补全</strong>
-        <span>请先补全发票基础信息或商品明细，再继续审核流程。</span>
+        <span v-if="isInvoiceNumberMissing(invoice)">
+          发票号码未识别，无法完成重复检测，请先补全资料。
+        </span>
+        <span v-else>
+          请先补全发票基础信息或商品明细，再继续审核流程。
+        </span>
       </div>
       <div v-else-if="invoice.canConfirmCategory">
         <strong>待完成商品确认</strong>

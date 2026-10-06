@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  computed,
   ref,
   watch,
 } from 'vue'
@@ -42,6 +43,7 @@ const emit = defineEmits<{
 
 const sellerName = ref('')
 const sellerTaxId = ref('')
+const invoiceNumber = ref('')
 const invoiceDate = ref('')
 const totalAmount = ref<number | null>(null)
 const note = ref('')
@@ -49,6 +51,13 @@ const items = ref<ManualDataFormItem[]>([])
 const initialInvoice = ref<ManualInvoiceData>({})
 const initialItems = ref<ManualDataFormItem[]>([])
 let newItemSequence = 0
+
+const isInvoiceNumberRequired = computed(() => {
+  return props.dataIssues.some((issue) => {
+    return issue.scope === 'invoice'
+      && issue.field === 'invoiceNumber'
+  })
+})
 
 function toNumber(value: number | string | null): number | null {
   if (value === null || value === '') {
@@ -97,10 +106,12 @@ function resetForm() {
 
   sellerName.value = props.invoice.sellerName || ''
   sellerTaxId.value = props.invoice.sellerTaxId || ''
+  invoiceNumber.value = props.invoice.invoiceNumber || ''
   invoiceDate.value = toDateValue(props.invoice.invoiceDate)
   totalAmount.value = toNumber(props.invoice.totalAmount)
   note.value = ''
   initialInvoice.value = {
+    invoiceNumber: props.invoice.invoiceNumber,
     sellerName: props.invoice.sellerName,
     sellerTaxId: props.invoice.sellerTaxId,
     invoiceDate: toDateValue(props.invoice.invoiceDate) || null,
@@ -197,9 +208,19 @@ function submit() {
   }
 
   const invoicePatch: ManualInvoiceData = {}
+  const normalizedInvoiceNumber = invoiceNumber.value.trim() || null
   const normalizedSellerName = sellerName.value.trim() || null
   const normalizedSellerTaxId = sellerTaxId.value.trim() || null
   const normalizedInvoiceDate = invoiceDate.value || null
+
+  if (isInvoiceNumberRequired.value && !normalizedInvoiceNumber) {
+    ElMessage.warning('请补全发票号码')
+    return
+  }
+
+  if (normalizedInvoiceNumber !== initialInvoice.value.invoiceNumber) {
+    invoicePatch.invoiceNumber = normalizedInvoiceNumber
+  }
 
   if (normalizedSellerName !== initialInvoice.value.sellerName) {
     invoicePatch.sellerName = normalizedSellerName
@@ -308,6 +329,16 @@ watch(
         <div class="form-section">
           <h3>发票基础信息</h3>
           <div class="invoice-form-grid">
+            <el-form-item
+              label="发票号码"
+              :required="isInvoiceNumberRequired"
+            >
+              <el-input
+                v-model="invoiceNumber"
+                maxlength="64"
+                placeholder="请输入发票号码或数电票号码"
+              />
+            </el-form-item>
             <el-form-item label="销售方名称">
               <el-input v-model="sellerName" maxlength="255" />
             </el-form-item>
