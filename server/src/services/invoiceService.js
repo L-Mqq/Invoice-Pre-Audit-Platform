@@ -7,6 +7,9 @@ const {
 const {
   getManualProcessingContext,
 } = require('./invoiceDataValidationService')
+const {
+  getSuspectedDuplicateInvoiceId,
+} = require('../utils/duplicateInvoice')
 
 const QUALIFICATION_STATUSES = new Set([
   'pending',
@@ -154,9 +157,16 @@ async function getInvoiceDetail(rawInvoiceId) {
     throw notFound('发票不存在')
   }
 
-  const [items, files] = await Promise.all([
+  const duplicateInvoiceId = getSuspectedDuplicateInvoiceId(
+    invoice.qualification_reason,
+  )
+
+  const [items, files, duplicateCandidate] = await Promise.all([
     invoiceRepository.findItemsByInvoiceId(invoiceId),
     invoiceFileRepository.findByInvoiceId(invoiceId),
+    duplicateInvoiceId
+      ? invoiceRepository.findSummaryById(duplicateInvoiceId)
+      : Promise.resolve(null),
   ])
   const manualProcessing = getManualProcessingContext({
     invoice,
@@ -175,6 +185,17 @@ async function getInvoiceDetail(rawInvoiceId) {
     financeStatus: invoice.finance_status,
     reimbursementStatus: invoice.reimbursement_status,
     qualificationReason: invoice.qualification_reason,
+    duplicateCandidate: duplicateCandidate
+      ? {
+        id: duplicateCandidate.id,
+        invoiceNumber: duplicateCandidate.invoice_number,
+        invoiceDate: duplicateCandidate.invoice_date,
+        sellerName: duplicateCandidate.seller_name,
+        sellerTaxId: duplicateCandidate.seller_tax_id,
+        totalAmount: duplicateCandidate.total_amount,
+        qualificationStatus: duplicateCandidate.qualification_status,
+      }
+      : null,
     cumulativeAmount: invoice.cumulative_amount,
     cumulativeWeekStart: invoice.cumulative_week_start,
     sourceBatchId: invoice.source_batch_id,

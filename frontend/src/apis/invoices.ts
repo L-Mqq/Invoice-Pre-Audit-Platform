@@ -110,6 +110,16 @@ export interface InvoiceDataIssue {
   message: string
 }
 
+export interface InvoiceDuplicateCandidate {
+  id: number
+  invoiceNumber: string | null
+  invoiceDate: string | null
+  sellerName: string | null
+  sellerTaxId: string | null
+  totalAmount: number | string
+  qualificationStatus: string
+}
+
 export interface InvoiceDetail {
   id: number
   invoiceNumber: string | null
@@ -122,6 +132,7 @@ export interface InvoiceDetail {
   financeStatus: string
   reimbursementStatus: string
   qualificationReason: string | null
+  duplicateCandidate: InvoiceDuplicateCandidate | null
   cumulativeAmount: number | string | null
   cumulativeWeekStart: string | null
   sourceBatchId: string | null

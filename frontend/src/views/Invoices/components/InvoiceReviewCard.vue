@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import type { InvoiceDetail } from '../../../apis/invoices'
+import type {
+  InvoiceDetail,
+  InvoiceDuplicateCandidate,
+} from '../../../apis/invoices'
 import type { WeeklyVoucherRequirement } from '../../../apis/voucher'
 import { formatChinaDate } from '../../../utils/date'
 import { getQualificationStatusLabel } from '../../../utils/status'
@@ -22,6 +25,7 @@ const props = defineProps<{
   voucherGroupsError: string
   isSuspectedDuplicate: boolean
   duplicateInvoiceId: number | null
+  duplicateCandidate: InvoiceDuplicateCandidate | null
   duplicateReviewSubmitting: boolean
 }>()
 
@@ -33,6 +37,7 @@ const emit = defineEmits<{
   submitVoucher: []
   viewVoucher: []
   reviewDuplicate: []
+  viewDuplicateCandidate: []
 }>()
 
 function formatAmount(amount: number | string | null): string {
@@ -78,6 +83,18 @@ function getReviewStatusLabel(invoice: InvoiceDetail): string {
   }
 
   return getQualificationStatusLabel(invoice.qualificationStatus)
+}
+
+function getQualificationReason(invoice: InvoiceDetail): string {
+  if (props.isSuspectedDuplicate) {
+    const candidate = props.duplicateCandidate
+    const candidateId = candidate?.id || props.duplicateInvoiceId || '未知'
+    const invoiceNumber = candidate?.invoiceNumber || '未识别'
+
+    return `系统发现该发票与发票「${invoiceNumber}」（记录 #${candidateId}）的销售方税号和发票号码一致，请人工确认。`
+  }
+
+  return invoice.qualificationReason || '暂无预审结论'
 }
 
 function isInvoiceNumberMissing(invoice: InvoiceDetail): boolean {
@@ -144,7 +161,7 @@ function getWeeklyVoucherRequirementDescription(
     <div class="review-result">
       <div>
         <span>预审原因</span>
-        <strong>{{ invoice.qualificationReason || '暂无预审结论' }}</strong>
+        <strong>{{ getQualificationReason(invoice) }}</strong>
       </div>
       <div>
         <span>自然周累计</span>
@@ -238,7 +255,8 @@ function getWeeklyVoucherRequirementDescription(
       <div v-if="isSuspectedDuplicate">
         <strong>疑似重复发票</strong>
         <span>
-          系统发现该发票与发票 #{{ duplicateInvoiceId || '未知' }} 的销售方税号和发票号码一致，请人工确认。
+          系统发现该发票与发票「{{ duplicateCandidate?.invoiceNumber || '未识别' }}」
+          （记录 #{{ duplicateCandidate?.id || duplicateInvoiceId || '未知' }}）的销售方税号和发票号码一致，请人工确认。
         </span>
       </div>
       <div v-else-if="invoice.canManualCompleteData">
@@ -281,14 +299,24 @@ function getWeeklyVoucherRequirementDescription(
         <strong>当前无可用审核操作</strong>
         <span>请根据当前发票状态继续处理。</span>
       </div>
-      <el-button
+      <div
         v-if="isSuspectedDuplicate"
-        type="warning"
-        :loading="duplicateReviewSubmitting"
-        @click="emit('reviewDuplicate')"
+        class="duplicate-action-buttons"
       >
-        判定重复发票
-      </el-button>
+        <el-button
+          :disabled="!duplicateCandidate"
+          @click="emit('viewDuplicateCandidate')"
+        >
+          查看关联发票
+        </el-button>
+        <el-button
+          type="warning"
+          :loading="duplicateReviewSubmitting"
+          @click="emit('reviewDuplicate')"
+        >
+          判定重复发票
+        </el-button>
+      </div>
       <el-button
         v-else-if="invoice.canManualCompleteData"
         type="primary"
@@ -359,6 +387,13 @@ function getWeeklyVoucherRequirementDescription(
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+.duplicate-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .review-result span,

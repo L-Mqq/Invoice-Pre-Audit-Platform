@@ -78,6 +78,10 @@ const duplicateInvoiceId = computed(() => {
   )
 })
 
+const duplicateCandidate = computed(() => {
+  return invoiceDetail.value?.duplicateCandidate || null
+})
+
 async function refreshInvoiceDetailPreservingScroll() {
   await loadInvoiceDetail({
     preserveScroll: true,
@@ -230,7 +234,33 @@ function openFirstCategoryConfirmation() {
   openEvidenceDialog(item)
 }
 
+function getDuplicateReturnInvoiceId(): string | null {
+  const value = route.query.returnInvoiceId
+  const invoiceId = Array.isArray(value)
+    ? value[0]
+    : value
+
+  return typeof invoiceId === 'string' && /^\d+$/.test(invoiceId)
+    ? invoiceId
+    : null
+}
+
 function goBack() {
+  const returnInvoiceId = getDuplicateReturnInvoiceId()
+
+  if (
+    route.query.from === 'duplicate-candidate'
+    && returnInvoiceId
+  ) {
+    router.push({
+      name: 'invoice-detail',
+      params: {
+        invoiceId: returnInvoiceId,
+      },
+    })
+    return
+  }
+
   if (route.query.from === 'reimbursement-progress') {
     router.push({
       name: 'reimbursement-progress',
@@ -248,6 +278,15 @@ function goBack() {
 }
 
 function getBackLabel(): string {
+  const returnInvoiceId = getDuplicateReturnInvoiceId()
+
+  if (
+    route.query.from === 'duplicate-candidate'
+    && returnInvoiceId
+  ) {
+    return '← 返回疑似重复发票'
+  }
+
   if (route.query.from === 'reimbursement-progress') {
     return '← 返回报销进度'
   }
@@ -296,6 +335,26 @@ function openDuplicateReview() {
   duplicateReviewDecision.value = 'not_duplicate'
   duplicateReviewNote.value = ''
   duplicateReviewVisible.value = true
+}
+
+function viewDuplicateCandidate() {
+  const sourceInvoiceId = invoiceDetail.value?.id
+
+  if (!sourceInvoiceId || !duplicateCandidate.value) {
+    ElMessage.warning('关联发票记录不存在或无权查看')
+    return
+  }
+
+  router.push({
+    name: 'invoice-detail',
+    params: {
+      invoiceId: duplicateCandidate.value.id,
+    },
+    query: {
+      from: 'duplicate-candidate',
+      returnInvoiceId: String(sourceInvoiceId),
+    },
+  })
 }
 
 async function submitDuplicateReview() {
@@ -450,6 +509,7 @@ async function submitDuplicateReview() {
             :voucher-groups-error="voucherGroupsError"
             :is-suspected-duplicate="isSuspectedDuplicate"
             :duplicate-invoice-id="duplicateInvoiceId"
+            :duplicate-candidate="duplicateCandidate"
             :duplicate-review-submitting="duplicateReviewSubmitting"
             @submit-review="submitInvoiceReview"
             @enter-review="openQualificationReview"
@@ -458,6 +518,7 @@ async function submitDuplicateReview() {
             @submit-voucher="handleSubmitVoucher"
             @view-voucher="handleViewVoucher"
             @review-duplicate="openDuplicateReview"
+            @view-duplicate-candidate="viewDuplicateCandidate"
           />
         </div>
 
@@ -494,7 +555,7 @@ async function submitDuplicateReview() {
       destroy-on-close
     >
       <el-alert
-        :title="`系统发现该发票与发票 #${duplicateInvoiceId || '未知'} 的销售方税号和发票号码一致。`"
+        :title="`系统发现该发票与发票「${duplicateCandidate?.invoiceNumber || '未识别'}」（记录 #${duplicateCandidate?.id || duplicateInvoiceId || '未知'}）的销售方税号和发票号码一致。`"
         type="warning"
         :closable="false"
         show-icon

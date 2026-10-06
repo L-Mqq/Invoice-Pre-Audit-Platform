@@ -380,6 +380,24 @@ async function findById(invoiceId) {
   return rows[0] || null
 }
 
+async function findSummaryById(invoiceId) {
+  const [rows] = await pool.execute(
+    `SELECT
+       id,
+       invoice_number,
+       invoice_date,
+       seller_name,
+       seller_tax_id,
+       total_amount,
+       qualification_status
+     FROM invoices
+     WHERE id = ?`,
+    [invoiceId],
+  )
+
+  return rows[0] || null
+}
+
 async function findItemsByInvoiceId(invoiceId) {
   const [rows] = await pool.execute(
     `SELECT
@@ -475,6 +493,7 @@ module.exports = {
   findItemsByInvoiceIds,
   findPage,
   findById,
+  findSummaryById,
   findItemsByInvoiceId,
   updateQualificationByCategory,
   updateItemPriceType,
