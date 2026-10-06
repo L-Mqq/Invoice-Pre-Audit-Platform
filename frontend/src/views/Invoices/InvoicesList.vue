@@ -17,6 +17,7 @@ import {
   getFinanceStatusLabel,
   getPreAuditStatusLabel,
   getReimbursementStatusLabel,
+  isSuspectedDuplicateInvoice,
 } from '../../utils/status'
 import {
   formatChinaDate,
@@ -85,6 +86,14 @@ function getPreAuditStatusType(status: InvoiceRow['preAuditStatus']) {
   }
 
   return 'warning'
+}
+
+function getInvoicePreAuditStatusLabel(invoice: InvoiceRow) {
+  if (isSuspectedDuplicateInvoice(invoice.qualificationReason)) {
+    return '疑似重复'
+  }
+
+  return getPreAuditStatusLabel(invoice.preAuditStatus)
 }
 
 function goToUpload() {
@@ -330,7 +339,7 @@ onMounted(loadInvoices)
                 :type="getPreAuditStatusType(row.preAuditStatus)"
                 effect="plain"
               >
-                {{ getPreAuditStatusLabel(row.preAuditStatus) }}
+                {{ getInvoicePreAuditStatusLabel(row) }}
               </el-tag>
             </el-tooltip>
           </template>

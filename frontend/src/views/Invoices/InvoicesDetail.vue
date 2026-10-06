@@ -1,14 +1,22 @@
 <script setup lang="ts">
 import {
+  computed,
   ref,
 } from 'vue'
-import { ElMessage } from 'element-plus'
+import {
+  ElMessage,
+  ElMessageBox,
+} from 'element-plus'
 import {
   useRoute,
   useRouter,
 } from 'vue-router'
 import type { InvoiceDetailItem } from '../../apis/invoices'
-import type { InvoiceQualificationAction } from '../../apis/invoiceReview'
+import {
+  reviewInvoiceDuplicate,
+  type DuplicateReviewDecision,
+  type InvoiceQualificationAction,
+} from '../../apis/invoiceReview'
 import type {
   VoucherSubmissionFiles,
 } from '../../apis/voucher'
@@ -32,12 +40,21 @@ import { useInvoiceVoucher } from './composables/useInvoiceVoucher'
 import { useVoucherFileActions } from './composables/useVoucherFileActions'
 import { useVoucherReview } from './composables/useVoucherReview'
 import { useVoucherSubmission } from './composables/useVoucherSubmission'
+import {
+  getQualificationStatusLabel,
+  getSuspectedDuplicateInvoiceId,
+  isSuspectedDuplicateInvoice,
+} from '../../utils/status'
 
 const router = useRouter()
 const route = useRoute()
 const qualificationReviewVisible = ref(false)
 const voucherDialogVisible = ref(false)
 const voucherReviewDialogVisible = ref(false)
+const duplicateReviewVisible = ref(false)
+const duplicateReviewDecision = ref<DuplicateReviewDecision>('not_duplicate')
+const duplicateReviewNote = ref('')
+const duplicateReviewSubmitting = ref(false)
 
 const {
   getRouteInvoiceId,
@@ -48,6 +65,18 @@ const {
   selectedFile,
   selectedFileId,
 } = useInvoiceDetail()
+
+const isSuspectedDuplicate = computed(() => {
+  return isSuspectedDuplicateInvoice(
+    invoiceDetail.value?.qualificationReason,
+  )
+})
+
+const duplicateInvoiceId = computed(() => {
+  return getSuspectedDuplicateInvoiceId(
+    invoiceDetail.value?.qualificationReason,
+  )
+})
 
 async function refreshInvoiceDetailPreservingScroll() {
   await loadInvoiceDetail({
@@ -263,6 +292,69 @@ async function handleQualificationReview(
   }
 }
 
+function openDuplicateReview() {
+  duplicateReviewDecision.value = 'not_duplicate'
+  duplicateReviewNote.value = ''
+  duplicateReviewVisible.value = true
+}
+
+async function submitDuplicateReview() {
+  const invoice = invoiceDetail.value
+
+  if (!invoice) {
+    ElMessage.warning('发票详情尚未加载完成')
+    return
+  }
+
+  const isConfirmedDuplicate = duplicateReviewDecision.value === 'duplicate'
+  const confirmMessage = isConfirmedDuplicate
+    ? '确认后，该发票会被取消，不会进入财务和报销流程。'
+    : '确认后，系统会解除重复拦截，并恢复正常预审流程。'
+
+  try {
+    await ElMessageBox.confirm(
+      confirmMessage,
+      isConfirmedDuplicate ? '确认重复并取消' : '确认非重复并继续预审',
+      {
+        confirmButtonText: '确认提交',
+        cancelButtonText: '返回修改',
+        type: isConfirmedDuplicate ? 'warning' : 'info',
+      },
+    )
+  } catch {
+    return
+  }
+
+  duplicateReviewSubmitting.value = true
+
+  try {
+    const result = await reviewInvoiceDuplicate({
+      invoiceId: invoice.id,
+      decision: duplicateReviewDecision.value,
+      note: duplicateReviewNote.value.trim(),
+    })
+
+    await refreshInvoiceDetailPreservingScroll()
+    await loadVoucherGroups()
+    await loadWeeklyVoucherRequirements()
+
+    ElMessage.success(
+      isConfirmedDuplicate
+        ? '已确认重复，当前发票已取消'
+        : `已确认非重复，当前状态：${getQualificationStatusLabel(
+          result.qualificationStatus,
+        )}`,
+    )
+    duplicateReviewVisible.value = false
+  } catch (error) {
+    ElMessage.error(
+      error instanceof Error ? error.message : '重复发票判定失败',
+    )
+  } finally {
+    duplicateReviewSubmitting.value = false
+  }
+}
+
 </script>
 
 <template>
@@ -356,12 +448,16 @@ async function handleQualificationReview(
             :can-view-vouchers="canViewVouchers"
             :voucher-groups-loading="voucherGroupsLoading"
             :voucher-groups-error="voucherGroupsError"
+            :is-suspected-duplicate="isSuspectedDuplicate"
+            :duplicate-invoice-id="duplicateInvoiceId"
+            :duplicate-review-submitting="duplicateReviewSubmitting"
             @submit-review="submitInvoiceReview"
             @enter-review="openQualificationReview"
             @manual-complete="openManualDataDialog"
             @confirm-category="openFirstCategoryConfirmation"
             @submit-voucher="handleSubmitVoucher"
             @view-voucher="handleViewVoucher"
+            @review-duplicate="openDuplicateReview"
           />
         </div>
 
@@ -390,6 +486,60 @@ async function handleQualificationReview(
       @preview-voucher-file="previewVoucherFileById"
       @submit-review="handleQualificationReview"
     />
+
+    <el-dialog
+      v-model="duplicateReviewVisible"
+      title="重复发票人工判定"
+      width="520px"
+      destroy-on-close
+    >
+      <el-alert
+        :title="`系统发现该发票与发票 #${duplicateInvoiceId || '未知'} 的销售方税号和发票号码一致。`"
+        type="warning"
+        :closable="false"
+        show-icon
+      />
+
+      <el-form
+        class="duplicate-review-form"
+        label-position="top"
+      >
+        <el-form-item label="判定结果">
+          <el-radio-group v-model="duplicateReviewDecision">
+            <el-radio value="not_duplicate">
+              确认非重复并继续预审
+            </el-radio>
+            <el-radio value="duplicate">
+              确认重复并取消
+            </el-radio>
+          </el-radio-group>
+        </el-form-item>
+
+        <el-form-item label="处理说明（可选）">
+          <el-input
+            v-model="duplicateReviewNote"
+            type="textarea"
+            :rows="4"
+            maxlength="2000"
+            show-word-limit
+            placeholder="请填写人工核验依据"
+          />
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="duplicateReviewVisible = false">
+          取消
+        </el-button>
+        <el-button
+          :type="duplicateReviewDecision === 'duplicate' ? 'danger' : 'primary'"
+          :loading="duplicateReviewSubmitting"
+          @click="submitDuplicateReview"
+        >
+          {{ duplicateReviewDecision === 'duplicate' ? '确认重复并取消' : '确认非重复并继续预审' }}
+        </el-button>
+      </template>
+    </el-dialog>
 
     <InvoiceVoucherDialog
       v-model:visible="voucherDialogVisible"
@@ -603,6 +753,10 @@ async function handleQualificationReview(
 
 .load-error {
   margin-bottom: 20px;
+}
+
+.duplicate-review-form {
+  margin-top: 20px;
 }
 
 .status-strip {

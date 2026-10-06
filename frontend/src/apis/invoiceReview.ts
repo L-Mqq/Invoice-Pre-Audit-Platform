@@ -50,6 +50,25 @@ export interface ReviewInvoiceQualificationResponse {
   manualNote: string | null
 }
 
+export type DuplicateReviewDecision = 'duplicate' | 'not_duplicate'
+
+export interface ReviewInvoiceDuplicatePayload {
+  invoiceId: number
+  decision: DuplicateReviewDecision
+  note: string
+}
+
+export interface ReviewInvoiceDuplicateResponse {
+  id: number
+  decision: DuplicateReviewDecision
+  duplicateInvoiceId: number | null
+  qualificationStatus: string
+  qualificationReason: string
+  cumulativeAmount: number | string | null
+  cumulativeWeekStart: string | null
+  submittedAt: string | null
+}
+
 export interface InvoiceQualificationPreview {
   invoiceId: number
   priorCumulativeAmount: number | string | null
@@ -217,6 +236,33 @@ export async function reviewInvoiceQualification(
     if (axios.isAxiosError<{ message?: string }>(error)) {
       throw new Error(
         error.response?.data?.message || '发票级审核失败',
+      )
+    }
+
+    throw error
+  }
+}
+
+export async function reviewInvoiceDuplicate(
+  payload: ReviewInvoiceDuplicatePayload,
+): Promise<ReviewInvoiceDuplicateResponse> {
+  try {
+    const response = await http.patch<{
+      success: boolean
+      data: ReviewInvoiceDuplicateResponse
+    }>(
+      `/invoice-review/invoices/${payload.invoiceId}/duplicate-review`,
+      {
+        decision: payload.decision,
+        note: payload.note,
+      },
+    )
+
+    return response.data.data
+  } catch (error: unknown) {
+    if (axios.isAxiosError<{ message?: string }>(error)) {
+      throw new Error(
+        error.response?.data?.message || '重复发票判定失败',
       )
     }
 

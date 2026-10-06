@@ -5,6 +5,7 @@ import {
   getFinanceStatusLabel,
   getQualificationStatusLabel,
   getReimbursementStatusLabel,
+  isSuspectedDuplicateInvoice,
 } from '../../../utils/status'
 
 defineProps<{
@@ -13,6 +14,10 @@ defineProps<{
 }>()
 
 function getReviewStatusLabel(invoice: InvoiceDetail): string {
+  if (isSuspectedDuplicateInvoice(invoice.qualificationReason)) {
+    return '疑似重复'
+  }
+
   if (invoice.qualificationStatus === 'pending' && !invoice.submittedAt) {
     return '待提交审核'
   }

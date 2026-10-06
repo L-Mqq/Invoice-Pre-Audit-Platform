@@ -41,6 +41,8 @@ const extractionStatusTypes: Record<string, 'warning' | 'success' | 'danger'> = 
   failed: 'danger',
 }
 
+const suspectedDuplicateReasonPrefix = '【疑似重复】'
+
 function getStatusLabel(
   labels: Record<string, string>,
   value: string | null | undefined,
@@ -87,4 +89,24 @@ export function getExtractionStatusType(
   }
 
   return extractionStatusTypes[value] || 'info'
+}
+
+export function isSuspectedDuplicateInvoice(
+  qualificationReason: string | null | undefined,
+) {
+  return typeof qualificationReason === 'string'
+    && qualificationReason.startsWith(suspectedDuplicateReasonPrefix)
+}
+
+export function getSuspectedDuplicateInvoiceId(
+  qualificationReason: string | null | undefined,
+) {
+  if (!isSuspectedDuplicateInvoice(qualificationReason)) {
+    return null
+  }
+
+  const reason = qualificationReason || ''
+  const match = reason.match(/与发票 #(\d+) 疑似重复/)
+
+  return match ? Number(match[1]) : null
 }

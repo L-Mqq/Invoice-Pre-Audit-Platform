@@ -4,7 +4,7 @@ import type { WeeklyVoucherRequirement } from '../../../apis/voucher'
 import { formatChinaDate } from '../../../utils/date'
 import { getQualificationStatusLabel } from '../../../utils/status'
 
-defineProps<{
+const props = defineProps<{
   invoice: InvoiceDetail
   canSubmitReview: boolean
   canEnterInvoiceReview: boolean
@@ -20,6 +20,9 @@ defineProps<{
   canViewVouchers: boolean
   voucherGroupsLoading: boolean
   voucherGroupsError: string
+  isSuspectedDuplicate: boolean
+  duplicateInvoiceId: number | null
+  duplicateReviewSubmitting: boolean
 }>()
 
 const emit = defineEmits<{
@@ -29,6 +32,7 @@ const emit = defineEmits<{
   enterReview: []
   submitVoucher: []
   viewVoucher: []
+  reviewDuplicate: []
 }>()
 
 function formatAmount(amount: number | string | null): string {
@@ -65,6 +69,10 @@ function getCumulativeWeekDisplay(invoice: InvoiceDetail): string {
 }
 
 function getReviewStatusLabel(invoice: InvoiceDetail): string {
+  if (props.isSuspectedDuplicate) {
+    return '疑似重复'
+  }
+
   if (invoice.qualificationStatus === 'pending' && !invoice.submittedAt) {
     return '待提交审核'
   }
@@ -176,7 +184,7 @@ function getWeeklyVoucherRequirementDescription(
     </el-alert>
 
     <div
-      v-if="showVoucherSection"
+      v-if="showVoucherSection && !isSuspectedDuplicate"
       class="voucher-actions"
     >
       <div class="voucher-status">
@@ -220,7 +228,13 @@ function getWeeklyVoucherRequirementDescription(
     </div>
 
     <div class="review-actions">
-      <div v-if="invoice.canManualCompleteData">
+      <div v-if="isSuspectedDuplicate">
+        <strong>疑似重复发票</strong>
+        <span>
+          系统发现该发票与发票 #{{ duplicateInvoiceId || '未知' }} 的销售方税号和发票号码一致，请人工确认。
+        </span>
+      </div>
+      <div v-else-if="invoice.canManualCompleteData">
         <strong>资料待补全</strong>
         <span>请先补全发票基础信息或商品明细，再继续审核流程。</span>
       </div>
@@ -256,7 +270,15 @@ function getWeeklyVoucherRequirementDescription(
         <span>请根据当前发票状态继续处理。</span>
       </div>
       <el-button
-        v-if="invoice.canManualCompleteData"
+        v-if="isSuspectedDuplicate"
+        type="warning"
+        :loading="duplicateReviewSubmitting"
+        @click="emit('reviewDuplicate')"
+      >
+        判定重复发票
+      </el-button>
+      <el-button
+        v-else-if="invoice.canManualCompleteData"
         type="primary"
         @click="emit('manualComplete')"
       >
