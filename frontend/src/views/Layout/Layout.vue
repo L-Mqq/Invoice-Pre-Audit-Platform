@@ -8,7 +8,11 @@ import Sidebar from './components/Sidebar.vue'
     <Header />
     <div class="layout-body">
       <Sidebar />
-      <main class="layout-content" aria-label="内容详情">
+      <main
+        class="layout-content"
+        data-main-scroll-container
+        aria-label="内容详情"
+      >
         <router-view />
       </main>
     </div>

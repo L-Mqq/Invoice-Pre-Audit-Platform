@@ -49,6 +49,12 @@ const {
   selectedFileId,
 } = useInvoiceDetail()
 
+async function refreshInvoiceDetailPreservingScroll() {
+  await loadInvoiceDetail({
+    preserveScroll: true,
+  })
+}
+
 const {
   manualDataDialogVisible,
   manualDataSubmitting,
@@ -56,7 +62,7 @@ const {
   submitManualData,
 } = useInvoiceManualData({
   invoiceDetail,
-  loadInvoiceDetail,
+  loadInvoiceDetail: refreshInvoiceDetailPreservingScroll,
 })
 
 const {
@@ -76,7 +82,7 @@ const {
   selectedReviewItem,
   submitCategoryReview,
 } = useInvoiceCategoryReview({
-  loadInvoiceDetail,
+  loadInvoiceDetail: refreshInvoiceDetailPreservingScroll,
 })
 
 const {
@@ -88,7 +94,7 @@ const {
 } = useInvoiceReviewSubmission({
   getRouteInvoiceId,
   invoiceDetail,
-  loadInvoiceDetail,
+  loadInvoiceDetail: refreshInvoiceDetailPreservingScroll,
 })
 
 const {
@@ -119,7 +125,7 @@ const {
   submitVoucherReview,
   voucherReviewSubmitting,
 } = useVoucherReview({
-  loadInvoiceDetail,
+  loadInvoiceDetail: refreshInvoiceDetailPreservingScroll,
   loadVoucherGroups,
   loadWeeklyVoucherRequirements,
 })
@@ -131,7 +137,7 @@ const {
   invoiceDetail,
   canSubmitVoucher: isVoucherRequired,
   latestVoucherGroup,
-  loadInvoiceDetail,
+  loadInvoiceDetail: refreshInvoiceDetailPreservingScroll,
   loadVoucherGroups,
   loadWeeklyVoucherRequirements,
 })
@@ -141,7 +147,7 @@ const {
   submitQualificationReview,
 } = useInvoiceQualificationReview({
   invoiceDetail,
-  loadInvoiceDetail,
+  loadInvoiceDetail: refreshInvoiceDetailPreservingScroll,
   loadVoucherGroups,
   loadWeeklyVoucherRequirements,
 })

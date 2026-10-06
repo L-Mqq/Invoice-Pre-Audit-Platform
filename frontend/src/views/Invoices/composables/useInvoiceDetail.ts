@@ -1,5 +1,6 @@
 import {
   computed,
+  nextTick,
   ref,
   watch,
 } from 'vue'
@@ -16,6 +17,28 @@ function getErrorMessage(error: unknown): string {
   }
 
   return '获取发票详情失败'
+}
+
+function getMainScrollContainer(): HTMLElement | null {
+  return document.querySelector<HTMLElement>('[data-main-scroll-container]')
+}
+
+async function restoreMainScrollPosition(scrollTop: number) {
+  await nextTick()
+
+  await new Promise<void>((resolve) => {
+    requestAnimationFrame(() => {
+      resolve()
+    })
+  })
+
+  getMainScrollContainer()?.scrollTo({
+    top: scrollTop,
+  })
+}
+
+interface LoadInvoiceDetailOptions {
+  preserveScroll?: boolean
 }
 
 export function useInvoiceDetail() {
@@ -51,11 +74,26 @@ export function useInvoiceDetail() {
     return invoiceId
   }
 
-  async function loadInvoiceDetail() {
+  async function loadInvoiceDetail({
+    preserveScroll = false,
+  }: LoadInvoiceDetailOptions = {}) {
     const invoiceId = getRouteInvoiceId()
+    const currentInvoiceId = invoiceDetail.value?.id || null
+    const isRefreshingCurrentInvoice = preserveScroll
+      && currentInvoiceId === invoiceId
+    const mainScrollContainer = getMainScrollContainer()
+    const scrollTop = isRefreshingCurrentInvoice
+      ? mainScrollContainer?.scrollTop || 0
+      : 0
 
-    invoiceDetail.value = null
-    selectedFileId.value = null
+    if (!isRefreshingCurrentInvoice) {
+      invoiceDetail.value = null
+      selectedFileId.value = null
+      mainScrollContainer?.scrollTo({
+        top: 0,
+      })
+    }
+
     loadError.value = ''
 
     if (!invoiceId) {
@@ -69,7 +107,18 @@ export function useInvoiceDetail() {
       const detail = await getInvoiceDetail(invoiceId)
 
       invoiceDetail.value = detail
-      selectedFileId.value = detail.files[0]?.id || null
+
+      const hasSelectedFile = detail.files.some((file) => {
+        return file.id === selectedFileId.value
+      })
+
+      selectedFileId.value = hasSelectedFile
+        ? selectedFileId.value
+        : detail.files[0]?.id || null
+
+      if (isRefreshingCurrentInvoice) {
+        await restoreMainScrollPosition(scrollTop)
+      }
     } catch (error) {
       loadError.value = getErrorMessage(error)
     } finally {
