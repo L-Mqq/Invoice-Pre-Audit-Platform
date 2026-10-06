@@ -166,6 +166,36 @@ async function createRequirementInvoice({
   }
 }
 
+// 记录周累计凭证任务及关联发票的状态变更，保证任务生命周期可追溯。
+async function createWeeklyVoucherRequirementOperationLog({
+  connection = pool,
+  operatorId = null,
+  requirementId,
+  operationType,
+  beforeData = null,
+  afterData = null,
+}) {
+  await connection.execute(
+    `INSERT INTO operation_logs
+      (
+        operator_id,
+        operation_type,
+        resource_type,
+        resource_id,
+        before_data,
+        after_data
+      )
+     VALUES (?, ?, 'weekly_voucher_requirement', ?, ?, ?)`,
+    [
+      operatorId,
+      operationType,
+      requirementId,
+      JSON.stringify(beforeData),
+      JSON.stringify(afterData),
+    ],
+  )
+}
+
 // 查询任务下的全部关联发票与凭证完成状态。
 async function findRequirementInvoices({
   connection = pool,
@@ -377,6 +407,7 @@ module.exports = {
   completeRequirement,
   createRequirement,
   createRequirementInvoice,
+  createWeeklyVoucherRequirementOperationLog,
   findPendingRequirementByTriggerInvoiceId,
   findPendingRequirementForWeek,
   findPendingRequirementsByInvoiceId,

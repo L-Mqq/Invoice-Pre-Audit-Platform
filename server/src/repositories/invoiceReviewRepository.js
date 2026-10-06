@@ -10,6 +10,7 @@ async function reviewItemCategory({ connection = pool, itemId, result, note, ope
               ii.ai_category_reason AS aiCategoryReason,
               ii.manual_category_reason AS previousManualCategoryReason,
               i.qualification_status AS qualificationStatus,
+              i.qualification_reason AS qualificationReason,
               i.submitted_at AS submittedAt
          FROM invoice_items ii
          JOIN invoices i ON i.id = ii.invoice_id
@@ -116,6 +117,27 @@ async function reviewItemCategory({ connection = pool, itemId, result, note, ope
         JSON.stringify({
           finalCategoryResult: result,
           manualCategoryReason: note || '管理员人工确认',
+        }),
+      ],
+    )
+
+    await connection.execute(
+      `INSERT INTO operation_logs
+        (operator_id, operation_type, resource_type, resource_id, before_data, after_data)
+       VALUES (?, 'manual_category_review_result', 'invoice', ?, ?, ?)`,
+      [
+        operatorId,
+        item.invoiceId,
+        JSON.stringify({
+          qualificationStatus: item.qualificationStatus,
+          qualificationReason: item.qualificationReason,
+        }),
+        JSON.stringify({
+          qualificationStatus,
+          qualificationReason: reason,
+          triggerItemId: itemId,
+          triggerItemName: item.itemName,
+          triggerItemCategoryResult: result,
         }),
       ],
     )

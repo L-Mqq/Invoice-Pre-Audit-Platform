@@ -94,6 +94,22 @@ function getQualificationReason(invoice: InvoiceDetail): string {
     return `系统发现该发票与发票「${invoiceNumber}」（记录 #${candidateId}）的销售方税号和发票号码一致，请人工确认。`
   }
 
+  const dataIssueMessages = invoice.dataIssues
+    .map((issue) => {
+      return issue.message.trim()
+    })
+    .filter((message) => {
+      return message.length > 0
+    })
+
+  if (dataIssueMessages.length === 1) {
+    return `资料待补全：${dataIssueMessages[0]}`
+  }
+
+  if (dataIssueMessages.length > 1) {
+    return `资料待补全：共 ${dataIssueMessages.length} 项资料需要补全`
+  }
+
   return invoice.qualificationReason || '暂无预审结论'
 }
 

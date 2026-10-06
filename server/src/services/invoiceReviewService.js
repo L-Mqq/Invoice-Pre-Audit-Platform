@@ -429,6 +429,7 @@ async function resolveWeeklyVoucherRequirement({
   cumulativeWeekStart,
   cumulativeAmount,
   persistRequirement,
+  operatorId = null,
 }) {
   const relatedInvoices = await invoiceReviewRepository.findInvoicesForWeeklyVoucherRequirement({
     connection,
@@ -495,12 +496,14 @@ async function resolveWeeklyVoucherRequirement({
     triggeredCumulativeAmount: cumulativeAmount,
   })
 
+  const requirementInvoices = []
+
   for (const entry of relatedInvoiceVouchers) {
     const completedAt = entry.approvedVoucherGroup
       ? entry.approvedVoucherGroup.reviewed_at || evaluatedAt
       : null
 
-    await weeklyVoucherRequirementRepository.createRequirementInvoice({
+    const requirementInvoice = await weeklyVoucherRequirementRepository.createRequirementInvoice({
       connection,
       requirementId: requirement.id,
       invoiceId: entry.invoice.id,
@@ -511,13 +514,45 @@ async function resolveWeeklyVoucherRequirement({
       approvedVoucherGroupId: entry.approvedVoucherGroup?.id || null,
       completedAt,
     })
+
+    requirementInvoices.push(requirementInvoice)
   }
+
+  await weeklyVoucherRequirementRepository.createWeeklyVoucherRequirementOperationLog({
+    connection,
+    operatorId,
+    requirementId: requirement.id,
+    operationType: 'create_weekly_voucher_requirement',
+    beforeData: null,
+    afterData: {
+      ...requirement,
+      invoiceIds: requirementInvoices.map((requirementInvoice) => {
+        return requirementInvoice.invoiceId
+      }),
+      requirementInvoices,
+    },
+  })
 
   if (allInvoicesHaveApprovedVoucher) {
     await weeklyVoucherRequirementRepository.completeRequirement({
       connection,
       requirementId: requirement.id,
       completedAt: evaluatedAt,
+    })
+
+    await weeklyVoucherRequirementRepository.createWeeklyVoucherRequirementOperationLog({
+      connection,
+      operatorId,
+      requirementId: requirement.id,
+      operationType: 'complete_weekly_voucher_requirement',
+      beforeData: {
+        status: 'pending',
+      },
+      afterData: {
+        status: 'completed',
+        completedAt: evaluatedAt,
+        completionReason: '创建任务时全部关联发票已具备已审核通过的完整凭证',
+      },
     })
 
     return {
@@ -544,6 +579,7 @@ async function resolveApprovalDecision({
   items,
   findApprovedInvoicesForWeek = invoiceReviewRepository.findApprovedInvoicesForWeek,
   persistWeeklyVoucherRequirement = true,
+  operatorId = null,
 }) {
   const categoryDecision = getCategoryDecision(items)
   if (categoryDecision) {
@@ -615,6 +651,7 @@ async function resolveApprovalDecision({
       cumulativeWeekStart: weekStart,
       cumulativeAmount,
       persistRequirement: persistWeeklyVoucherRequirement,
+      operatorId,
     })
 
     if (!weeklyVoucherDecision.allInvoicesHaveApprovedVoucher) {
@@ -1276,6 +1313,7 @@ async function reviewInvoiceQualification({
         connection,
         invoice,
         items,
+        operatorId: normalizedOperatorId,
       })
     } else {
       const pendingRequirement = await weeklyVoucherRequirementRepository.findPendingRequirementByTriggerInvoiceId({
@@ -1285,10 +1323,28 @@ async function reviewInvoiceQualification({
       })
 
       if (pendingRequirement) {
+        const cancelledAt = new Date()
+
         await weeklyVoucherRequirementRepository.cancelRequirement({
           connection,
           requirementId: pendingRequirement.id,
-          cancelledAt: new Date(),
+          cancelledAt,
+        })
+
+        await weeklyVoucherRequirementRepository.createWeeklyVoucherRequirementOperationLog({
+          connection,
+          operatorId: normalizedOperatorId,
+          requirementId: pendingRequirement.id,
+          operationType: 'cancel_weekly_voucher_requirement',
+          beforeData: {
+            status: pendingRequirement.status,
+            triggerInvoiceId: pendingRequirement.trigger_invoice_id,
+          },
+          afterData: {
+            status: 'cancelled',
+            cancelledAt,
+            cancellationReason: normalizedNote,
+          },
         })
       }
 
@@ -1457,6 +1513,7 @@ async function reviewInvoiceDuplicate({
         connection,
         invoice,
         items,
+        operatorId: normalizedOperatorId,
       })
     } else {
       result = {

@@ -115,6 +115,27 @@ async function resolveWeeklyVoucherRequirementsAfterApproval({
       completedAt: reviewedAt,
     })
 
+    await weeklyVoucherRequirementRepository.createWeeklyVoucherRequirementOperationLog({
+      connection,
+      operatorId,
+      requirementId: requirement.id,
+      operationType: 'complete_weekly_voucher_requirement_invoice',
+      beforeData: {
+        requirementInvoiceId: requirement.requirement_invoice_id,
+        invoiceId: requirement.invoice_id,
+        voucherStatus: requirement.voucher_status,
+        approvedVoucherGroupId: requirement.approved_voucher_group_id,
+        completedAt: requirement.completed_at,
+      },
+      afterData: {
+        requirementInvoiceId: requirement.requirement_invoice_id,
+        invoiceId: requirement.invoice_id,
+        voucherStatus: 'approved',
+        approvedVoucherGroupId: approvedVoucherGroup.id,
+        completedAt: reviewedAt,
+      },
+    })
+
     await weeklyVoucherRequirementRepository.findRequirementInvoices({
       connection,
       requirementId: requirement.id,
@@ -137,6 +158,21 @@ async function resolveWeeklyVoucherRequirementsAfterApproval({
       connection,
       requirementId: requirement.id,
       completedAt: reviewedAt,
+    })
+
+    await weeklyVoucherRequirementRepository.createWeeklyVoucherRequirementOperationLog({
+      connection,
+      operatorId,
+      requirementId: requirement.id,
+      operationType: 'complete_weekly_voucher_requirement',
+      beforeData: {
+        status: requirement.status,
+      },
+      afterData: {
+        status: 'completed',
+        completedAt: reviewedAt,
+        completionReason: '全部关联发票的凭证均已审核通过',
+      },
     })
 
     const triggerInvoice = await voucherRepository.findInvoiceById({
