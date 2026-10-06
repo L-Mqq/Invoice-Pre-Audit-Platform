@@ -148,7 +148,8 @@ async function findInvoiceForQualificationReview({
        cumulative_week_start,
        finance_status,
        reimbursement_status,
-       manual_note
+       manual_note,
+       updated_at
      FROM invoices
      WHERE id = ?
      FOR UPDATE`,
@@ -585,6 +586,35 @@ async function createQualificationReviewLog({
   )
 }
 
+// 查询当前发票与指定候选发票的“确认非重复”结论是否仍有效。
+async function hasActiveDuplicateClearDecision({
+  connection = pool,
+  invoiceId,
+  duplicateInvoiceId,
+  invoiceUpdatedAt,
+}) {
+  const [rows] = await connection.execute(
+    `SELECT id
+     FROM operation_logs
+     WHERE resource_type = 'invoice'
+       AND resource_id = ?
+       AND operation_type = 'duplicate_cleared'
+       AND JSON_UNQUOTE(
+         JSON_EXTRACT(after_data, '$.duplicateInvoiceId')
+       ) = ?
+       AND created_at >= ?
+     ORDER BY id DESC
+     LIMIT 1`,
+    [
+      invoiceId,
+      String(duplicateInvoiceId),
+      invoiceUpdatedAt,
+    ],
+  )
+
+  return rows.length > 0
+}
+
 module.exports = {
   reviewItemCategory,
   findInvoiceForQualificationReview,
@@ -603,4 +633,5 @@ module.exports = {
   findInvoicesForWeeklyVoucherRequirement,
   updateInvoiceQualificationReview,
   createQualificationReviewLog,
+  hasActiveDuplicateClearDecision,
 }

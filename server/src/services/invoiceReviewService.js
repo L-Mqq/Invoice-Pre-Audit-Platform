@@ -1066,7 +1066,16 @@ async function submitInvoiceForReview({
       forUpdate: true,
     })
 
-    if (duplicateInvoice) {
+    const hasActiveDuplicateClearDecision = duplicateInvoice
+      ? await invoiceReviewRepository.hasActiveDuplicateClearDecision({
+        connection,
+        invoiceId: normalizedInvoiceId,
+        duplicateInvoiceId: duplicateInvoice.id,
+        invoiceUpdatedAt: invoice.updated_at,
+      })
+      : false
+
+    if (duplicateInvoice && !hasActiveDuplicateClearDecision) {
       const qualificationReason = buildSuspectedDuplicateReason({
         duplicateInvoiceId: duplicateInvoice.id,
       })
