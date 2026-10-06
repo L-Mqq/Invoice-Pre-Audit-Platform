@@ -16,8 +16,34 @@ import Sidebar from './components/Sidebar.vue'
 </template>
 
 <style scoped>
-.layout-page { min-height: 100vh; background: #f8fafc; }
-.layout-body { display: flex; min-height: calc(100vh - 72px); }
-.layout-content { flex: 1; min-width: 0; padding: 28px; }
-@media (max-width: 640px) { .layout-body { min-height: calc(100vh - 64px); } }
+.layout-page {
+  display: flex;
+  height: 100dvh;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  background: #f8fafc;
+}
+
+.layout-body {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.layout-content {
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 28px;
+}
+
+@media (max-width: 640px) {
+  .layout-content {
+    padding: 20px 16px;
+  }
+}
 </style>

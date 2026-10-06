@@ -60,8 +60,20 @@ function handleSelect(key: string) {
 </template>
 
 <style scoped>
-.sidebar { width: 224px; flex: 0 0 224px; border-right: 1px solid #e2e8f0; background: #fff; }
-.side-menu { height: 100%; border-right: 0; padding: 14px 10px; }
+.sidebar {
+  width: 224px;
+  min-height: 0;
+  flex: 0 0 224px;
+  overflow-y: auto;
+  border-right: 1px solid #e2e8f0;
+  background: #fff;
+}
+
+.side-menu {
+  min-height: 100%;
+  border-right: 0;
+  padding: 14px 10px;
+}
 .side-menu :deep(.el-menu-item), .side-menu :deep(.el-sub-menu__title) { height: 46px; line-height: 46px; margin: 3px 0; border-radius: 9px; color: #475569; }
 .side-menu :deep(.el-menu-item.is-active) { color: #2563eb; background: #eff6ff; font-weight: 600; }
 .side-menu :deep(.el-sub-menu.is-opened > .el-sub-menu__title) { color: #475569; }

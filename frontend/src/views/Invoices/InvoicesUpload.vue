@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useUploadBatchStore } from '../../stores/uploadBatch'
 import { previewInvoiceFile } from '../../apis/invoiceFile'
 import {
@@ -32,15 +32,6 @@ const previewLoading = ref(false)
 const previewUrl = ref('')
 const previewName = ref('')
 
-watch(previewVisible, (visible) => {
-  document.documentElement.style.overflow = visible ? 'hidden' : ''
-  document.body.style.overflow = visible ? 'hidden' : ''
-})
-
-onBeforeUnmount(() => {
-  document.documentElement.style.overflow = ''
-  document.body.style.overflow = ''
-})
 const hasFiles = computed(() => files.value.length > 0)
 const hasBatch = computed(() => Boolean(batch.value))
 const canUpload = computed(() => hasFiles.value && !isUploading.value)
@@ -235,7 +226,6 @@ async function startUpload() {
 </template>
 
 <style scoped>
-:global(html), :global(body), :global(#app) { min-height: 100%; height: auto; overflow-y: auto; }
 :global(body.el-popup-parent--hidden) { overflow: hidden !important; }
 .upload-page { max-width: 1180px; min-height: calc(100vh - 170px); margin: 0 auto; padding-bottom: 56px; color: #0f172a; }
 .page-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; margin-bottom: 24px; }.eyebrow { margin: 0 0 6px; color: #2563eb; font-size: 11px; font-weight: 700; letter-spacing: .14em; }h1 { margin: 0; font-size: 28px; letter-spacing: -.02em; }.subtitle { margin: 8px 0 0; color: #64748b; font-size: 14px; }.rule-hint { padding: 10px 14px; border: 1px solid #dbeafe; border-radius: 9px; background: #eff6ff; color: #2563eb; font-size: 12px; white-space: nowrap; }
