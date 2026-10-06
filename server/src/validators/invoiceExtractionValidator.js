@@ -1,4 +1,19 @@
-const REQUIRED_FIELDS = ['sellerName', 'sellerTaxId', 'invoiceDate', 'totalAmount', 'items']
+const REQUIRED_FIELDS = [
+  'invoiceNumber',
+  'sellerName',
+  'sellerTaxId',
+  'invoiceDate',
+  'totalAmount',
+  'items',
+]
+
+const FIELD_LABELS = {
+  invoiceNumber: '发票号码',
+  invoiceDate: '开票日期',
+  sellerName: '销售方名称',
+  sellerTaxId: '销售方纳税人识别号',
+  totalAmount: '价税合计',
+}
 
 const OUTPUT_FIELDS = [
   'invoiceNumber',
@@ -52,7 +67,13 @@ function validateInvoiceExtraction(input) {
         errors.push(createError(field, 'REQUIRED', '商品明细不能为空'))
       }
     } else if (isBlank(data[field])) {
-      errors.push(createError(field, 'REQUIRED', `${field}不能为空`))
+      errors.push(
+        createError(
+          field,
+          'REQUIRED',
+          `${FIELD_LABELS[field] || field}不能为空`,
+        ),
+      )
     }
   }
 

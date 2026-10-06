@@ -1,4 +1,5 @@
 const { pool } = require('../config/database')
+const invoiceRepository = require('../repositories/invoiceRepository')
 const invoiceReviewRepository = require('../repositories/invoiceReviewRepository')
 const voucherRepository = require('../repositories/voucherRepository')
 const weeklyVoucherRequirementRepository = require('../repositories/weeklyVoucherRequirementRepository')
@@ -13,6 +14,7 @@ const {
   validateStoredInvoiceData,
 } = require('./invoiceDataValidationService')
 const {
+  buildSuspectedDuplicateReason,
   getSuspectedDuplicateInvoiceId,
   isSuspectedDuplicateReason,
 } = require('../utils/duplicateInvoice')
@@ -170,6 +172,14 @@ function normalizeInvoicePatch(invoice) {
 
   const patch = {}
 
+  if (hasOwn(invoice, 'invoiceNumber')) {
+    patch.invoiceNumber = normalizeOptionalText({
+      value: invoice.invoiceNumber,
+      fieldName: 'invoiceNumber',
+      maxLength: 64,
+    })
+  }
+
   if (hasOwn(invoice, 'sellerName')) {
     patch.sellerName = normalizeOptionalText({
       value: invoice.sellerName,
@@ -292,6 +302,9 @@ function resolveEffectiveInvoiceData({
   patch,
 }) {
   return {
+    invoiceNumber: patch.invoiceNumber === undefined
+      ? invoice.invoice_number
+      : patch.invoiceNumber,
     sellerName: patch.sellerName === undefined
       ? invoice.seller_name
       : patch.sellerName,
@@ -312,6 +325,7 @@ function hasInvoiceDataChanged({
   effectiveInvoiceData,
 }) {
   return invoice.seller_name !== effectiveInvoiceData.sellerName
+    || invoice.invoice_number !== effectiveInvoiceData.invoiceNumber
     || invoice.seller_tax_id !== effectiveInvoiceData.sellerTaxId
     || toComparableDate(invoice.invoice_date) !== effectiveInvoiceData.invoiceDate
     || !isSameNumber(invoice.total_amount, effectiveInvoiceData.totalAmount)
@@ -864,6 +878,7 @@ async function updateInvoiceManualData({
     await invoiceReviewRepository.updateInvoiceManualData({
       connection,
       invoiceId: normalizedInvoiceId,
+      invoiceNumber: effectiveInvoiceData.invoiceNumber,
       sellerName: effectiveInvoiceData.sellerName,
       sellerTaxId: effectiveInvoiceData.sellerTaxId,
       invoiceDate: effectiveInvoiceData.invoiceDate,
@@ -887,6 +902,7 @@ async function updateInvoiceManualData({
     let qualificationStatus = 'pending_manual'
     let qualificationReason = getDataIssueReason(dataIssues)
     let manualProcessingType = 'data_completion'
+    let duplicateInvoice = null
 
     if (validation.valid) {
       const categoryDecision = getCategoryDecision(updatedItems)
@@ -898,11 +914,27 @@ async function updateInvoiceManualData({
           ? 'category_confirmation'
           : null
       } else {
-        qualificationStatus = 'pending'
-        qualificationReason = updatedInvoice.submitted_at
-          ? '资料已补全，等待重新执行规则审核'
-          : '资料已补全，等待提交审核'
-        manualProcessingType = null
+        duplicateInvoice = await invoiceRepository.findDuplicateInvoice({
+          connection,
+          invoiceId: normalizedInvoiceId,
+          sellerTaxId: updatedInvoice.seller_tax_id,
+          invoiceNumber: updatedInvoice.invoice_number,
+          forUpdate: true,
+        })
+
+        if (duplicateInvoice) {
+          qualificationStatus = 'pending_manual'
+          qualificationReason = buildSuspectedDuplicateReason({
+            duplicateInvoiceId: duplicateInvoice.id,
+          })
+          manualProcessingType = null
+        } else {
+          qualificationStatus = 'pending'
+          qualificationReason = updatedInvoice.submitted_at
+            ? '资料已补全，等待重新执行规则审核'
+            : '资料已补全，等待提交审核'
+          manualProcessingType = null
+        }
       }
     }
 
@@ -924,6 +956,7 @@ async function updateInvoiceManualData({
       },
       afterData: {
         invoice: {
+          invoiceNumber: effectiveInvoiceData.invoiceNumber,
           sellerName: effectiveInvoiceData.sellerName,
           sellerTaxId: effectiveInvoiceData.sellerTaxId,
           invoiceDate: effectiveInvoiceData.invoiceDate,
@@ -935,8 +968,28 @@ async function updateInvoiceManualData({
         dataIssues,
         qualificationStatus,
         qualificationReason,
+        duplicateInvoiceId: duplicateInvoice?.id || null,
       },
     })
+
+    if (duplicateInvoice) {
+      await invoiceReviewRepository.createQualificationReviewLog({
+        connection,
+        operatorId: normalizedOperatorId,
+        invoiceId: normalizedInvoiceId,
+        operationType: 'duplicate_detected',
+        beforeData: {
+          qualificationStatus: 'pending_manual',
+          qualificationReason: '资料补全后执行重复检测',
+        },
+        afterData: {
+          qualificationStatus,
+          qualificationReason,
+          duplicateInvoiceId: duplicateInvoice.id,
+          duplicateRule: 'seller_tax_id_and_invoice_number',
+        },
+      })
+    }
 
     await connection.commit()
 
@@ -947,6 +1000,7 @@ async function updateInvoiceManualData({
       completionRequired: dataIssues.length > 0,
       dataIssues,
       manualProcessingType,
+      duplicateInvoiceId: duplicateInvoice?.id || null,
       changedItemIds,
       createdItemIds,
     }
@@ -1003,6 +1057,55 @@ async function submitInvoiceForReview({
         `资料待补全，不能提交审核：${getDataIssueReason(manualProcessing.dataIssues)}`,
       )
     }
+
+    const duplicateInvoice = await invoiceRepository.findDuplicateInvoice({
+      connection,
+      invoiceId: normalizedInvoiceId,
+      sellerTaxId: invoice.seller_tax_id,
+      invoiceNumber: invoice.invoice_number,
+      forUpdate: true,
+    })
+
+    if (duplicateInvoice) {
+      const qualificationReason = buildSuspectedDuplicateReason({
+        duplicateInvoiceId: duplicateInvoice.id,
+      })
+
+      await invoiceReviewRepository.updateManualCompletionState({
+        connection,
+        invoiceId: normalizedInvoiceId,
+        qualificationStatus: 'pending_manual',
+        qualificationReason,
+      })
+
+      await invoiceReviewRepository.createQualificationReviewLog({
+        connection,
+        operatorId: normalizedOperatorId,
+        invoiceId: normalizedInvoiceId,
+        operationType: 'duplicate_detected',
+        beforeData: {
+          qualificationStatus: invoice.qualification_status,
+          qualificationReason: invoice.qualification_reason,
+          submittedAt: invoice.submitted_at,
+        },
+        afterData: {
+          qualificationStatus: 'pending_manual',
+          qualificationReason,
+          duplicateInvoiceId: duplicateInvoice.id,
+          duplicateRule: 'seller_tax_id_and_invoice_number',
+        },
+      })
+
+      await connection.commit()
+
+      return {
+        id: normalizedInvoiceId,
+        qualificationStatus: 'pending_manual',
+        qualificationReason,
+        submittedAt: null,
+      }
+    }
+
     const nonApprovedItem = items.find(
       (item) => item.final_category_result !== '可以',
     )

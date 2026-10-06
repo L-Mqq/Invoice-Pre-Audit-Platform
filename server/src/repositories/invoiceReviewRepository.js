@@ -293,6 +293,7 @@ async function findItemsForManualCompletion({
 async function updateInvoiceManualData({
   connection = pool,
   invoiceId,
+  invoiceNumber,
   sellerName,
   sellerTaxId,
   invoiceDate,
@@ -301,7 +302,8 @@ async function updateInvoiceManualData({
 }) {
   await connection.execute(
     `UPDATE invoices
-     SET seller_name = ?,
+     SET invoice_number = ?,
+         seller_name = ?,
          seller_tax_id = ?,
          invoice_date = ?,
          total_amount = ?,
@@ -310,6 +312,7 @@ async function updateInvoiceManualData({
          cumulative_week_start = NULL
      WHERE id = ?`,
     [
+      invoiceNumber,
       sellerName,
       sellerTaxId,
       invoiceDate,

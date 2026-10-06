@@ -59,11 +59,13 @@ async function findDuplicateInvoice({
   invoiceId,
   sellerTaxId,
   invoiceNumber,
+  forUpdate = false,
 }) {
   if (!sellerTaxId || !invoiceNumber) {
     return null
   }
 
+  const lockClause = forUpdate ? ' FOR UPDATE' : ''
   const [rows] = await connection.execute(
     `SELECT
        id,
@@ -78,7 +80,7 @@ async function findDuplicateInvoice({
        AND id <> ?
        AND qualification_status <> 'cancelled'
      ORDER BY id ASC
-     LIMIT 1`,
+     LIMIT 1${lockClause}`,
     [
       sellerTaxId,
       invoiceNumber,

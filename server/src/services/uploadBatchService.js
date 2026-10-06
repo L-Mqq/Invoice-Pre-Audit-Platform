@@ -112,20 +112,23 @@ async function createUploadBatch({ files, createdBy = null }) {
             valid: extraction.validation.valid,
             errors: extraction.validation.errors,
           })
-          if (extraction.validation.valid) {
+          const hasItemValidationError = extraction.validation.errors.some((error) => {
+            return error.field === 'items'
+              || error.field.startsWith('items.')
+          })
+
+          if (!hasItemValidationError) {
             const createdItems = await invoiceRepository.createItems({
               connection: resultConnection,
               invoiceId: storedFile.invoiceId,
               items: extraction.validation.data.items,
             })
-            
-            //判断商品品类
-            const categoryJudgment = await judgeItems({ connection: resultConnection, items: createdItems, persist: true })
-            await invoiceRepository.updateQualificationByCategory({
+
+            // 商品明细本身完整时可保存其识别结果；整张发票仍由基础字段校验决定是否可继续审核。
+            const categoryJudgment = await judgeItems({
               connection: resultConnection,
-              id: storedFile.invoiceId,
-              categoryResult: categoryJudgment.invoiceCategoryResult,
-              reason: categoryJudgment.reason,
+              items: createdItems,
+              persist: true,
             })
             const priceJudgment = await judgePriceItems({
               connection: resultConnection,
@@ -133,46 +136,57 @@ async function createUploadBatch({ files, createdBy = null }) {
               persist: true,
               updateItem: invoiceRepository.updateItemPriceType,
             })
-            // 新建低值品发票必须先补充并核验支付凭证，不能在上传阶段跳过该前置条件。
-            await invoiceRepository.updateQualificationByPrice({
-              connection: resultConnection,
-              id: storedFile.invoiceId,
-              priceResult: priceJudgment.invoicePriceResult,
-              reason: priceJudgment.reason,
-            })
 
-            const duplicateInvoice = await invoiceRepository.findDuplicateInvoice({
-              connection: resultConnection,
-              invoiceId: storedFile.invoiceId,
-              sellerTaxId: extraction.structured.data.sellerTaxId,
-              invoiceNumber: extraction.structured.data.invoiceNumber,
-            })
-
-            if (duplicateInvoice) {
-              const qualificationReason = buildSuspectedDuplicateReason({
-                duplicateInvoiceId: duplicateInvoice.id,
+            if (extraction.validation.valid) {
+              await invoiceRepository.updateQualificationByCategory({
+                connection: resultConnection,
+                id: storedFile.invoiceId,
+                categoryResult: categoryJudgment.invoiceCategoryResult,
+                reason: categoryJudgment.reason,
               })
 
-              await invoiceRepository.markSuspectedDuplicate({
+              // 新建低值品发票必须先补充并核验支付凭证，不能在上传阶段跳过该前置条件。
+              await invoiceRepository.updateQualificationByPrice({
+                connection: resultConnection,
+                id: storedFile.invoiceId,
+                priceResult: priceJudgment.invoicePriceResult,
+                reason: priceJudgment.reason,
+              })
+
+              const duplicateInvoice = await invoiceRepository.findDuplicateInvoice({
                 connection: resultConnection,
                 invoiceId: storedFile.invoiceId,
-                qualificationReason,
+                sellerTaxId: extraction.structured.data.sellerTaxId,
+                invoiceNumber: extraction.structured.data.invoiceNumber,
+                forUpdate: true,
               })
 
-              await invoiceRepository.createOperationLog({
-                connection: resultConnection,
-                operationType: 'duplicate_detected',
-                resourceId: storedFile.invoiceId,
-                beforeData: {
+              if (duplicateInvoice) {
+                const qualificationReason = buildSuspectedDuplicateReason({
                   duplicateInvoiceId: duplicateInvoice.id,
-                },
-                afterData: {
-                  qualificationStatus: 'pending_manual',
+                })
+
+                await invoiceRepository.markSuspectedDuplicate({
+                  connection: resultConnection,
+                  invoiceId: storedFile.invoiceId,
                   qualificationReason,
-                  duplicateInvoiceId: duplicateInvoice.id,
-                  duplicateRule: 'seller_tax_id_and_invoice_number',
-                },
-              })
+                })
+
+                await invoiceRepository.createOperationLog({
+                  connection: resultConnection,
+                  operationType: 'duplicate_detected',
+                  resourceId: storedFile.invoiceId,
+                  beforeData: {
+                    duplicateInvoiceId: duplicateInvoice.id,
+                  },
+                  afterData: {
+                    qualificationStatus: 'pending_manual',
+                    qualificationReason,
+                    duplicateInvoiceId: duplicateInvoice.id,
+                    duplicateRule: 'seller_tax_id_and_invoice_number',
+                  },
+                })
+              }
             }
           }
           await invoiceFileRepository.updateExtractionStatus({ connection: resultConnection, id: storedFile.id, status: 'success' })
