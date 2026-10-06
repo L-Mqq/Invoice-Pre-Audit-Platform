@@ -1,6 +1,9 @@
 const { pool } = require('../config/database')
 const financeRepository = require('../repositories/financeRepository')
 const {
+  getBusinessNow,
+} = require('../config/businessTime')
+const {
   getPreAuditStatus,
   getPreAuditStatusReason,
 } = require('../utils/preAuditStatus')
@@ -463,6 +466,7 @@ async function listFinanceWeeks({
   cumulativeWeekStart,
   sellerKeyword,
 }) {
+  const businessNow = getBusinessNow()
   const normalizedFinanceStatus = parseOptionalFinanceStatus(financeStatus)
   const normalizedWeekStart = parseOptionalCumulativeWeekStart(cumulativeWeekStart)
   const normalizedSellerKeyword = parseOptionalSellerKeyword(sellerKeyword)
@@ -503,7 +507,10 @@ async function listFinanceWeeks({
   }
 
   const allGroups = [...groupsByWeek.values()]
-    .map((group) => serializeFinanceWeekGroup({ group, now: new Date() }))
+    .map((group) => serializeFinanceWeekGroup({
+      group,
+      now: businessNow,
+    }))
     .sort((left, right) => right.weekStart.localeCompare(left.weekStart))
   const items = normalizedFinanceStatus
     ? allGroups.filter((group) => group.financeStatus === normalizedFinanceStatus)
@@ -527,8 +534,12 @@ async function submitFinanceWeek({
   const normalizedSellerTaxId = parseSellerTaxId(sellerTaxId)
   const normalizedWeekStart = parseCumulativeWeekStart(cumulativeWeekStart)
   const normalizedOperatorId = parseOperatorId(operatorId)
+  const businessNow = getBusinessNow()
 
-  if (!isWeekCompleted({ cumulativeWeekStart: normalizedWeekStart })) {
+  if (!isWeekCompleted({
+    cumulativeWeekStart: normalizedWeekStart,
+    now: businessNow,
+  })) {
     throw createHttpError(409, '该自然周尚未结束，请于下一周周一后提交财务')
   }
 
