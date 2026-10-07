@@ -10,5 +10,6 @@ router.get('/', controller.list)
 router.post('/', controller.create)
 router.patch('/:ruleId/status', controller.updateStatus)
 router.patch('/:ruleId', controller.update)
+router.delete('/:ruleId', controller.remove)
 
 module.exports = router

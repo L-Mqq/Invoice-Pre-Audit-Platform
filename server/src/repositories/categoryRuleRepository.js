@@ -265,6 +265,17 @@ async function updateCategoryRuleStatus({
   )
 }
 
+async function deleteCategoryRule({
+  connection = pool,
+  ruleId,
+}) {
+  await connection.execute(
+    `DELETE FROM category_rules
+      WHERE id = ?`,
+    [ruleId],
+  )
+}
+
 async function createOperationLog({
   connection = pool,
   operatorId,
@@ -347,6 +358,7 @@ module.exports = {
   createCategoryRule,
   updateCategoryRule,
   updateCategoryRuleStatus,
+  deleteCategoryRule,
   createOperationLog,
   updateItemCategory,
 }

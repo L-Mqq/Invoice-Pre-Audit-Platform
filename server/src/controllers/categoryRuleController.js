@@ -82,10 +82,29 @@ async function updateStatus(req, res, next) {
   }
 }
 
+async function remove(req, res, next) {
+  try {
+    const result = await categoryRuleService.deleteCategoryRule({
+      ruleId: req.params.ruleId,
+      operatorId: req.user.id,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
+    })
+
+    res.json({
+      success: true,
+      data: result,
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
 module.exports = {
   create,
   update,
   updateStatus,
+  remove,
   list,
   getSummary,
 }

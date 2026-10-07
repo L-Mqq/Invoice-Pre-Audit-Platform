@@ -402,6 +402,64 @@ async function updateCategoryRuleStatus({
   }
 }
 
+async function deleteCategoryRule({
+  ruleId: rawRuleId,
+  operatorId,
+  ipAddress,
+  userAgent,
+}) {
+  const ruleId = parseRuleId(rawRuleId)
+  const connection = await pool.getConnection()
+
+  try {
+    await connection.beginTransaction()
+
+    const currentRule = await categoryRuleRepository.findByIdForUpdate({
+      connection,
+      ruleId,
+    })
+
+    if (!currentRule) {
+      const error = new Error('规则不存在')
+      error.statusCode = 404
+      error.expose = true
+      throw error
+    }
+
+    const deletedAt = new Date().toISOString()
+
+    await categoryRuleRepository.createOperationLog({
+      connection,
+      operatorId,
+      ruleId,
+      operationType: 'delete_category_rule',
+      beforeData: mapRule(currentRule),
+      afterData: {
+        ...mapRule(currentRule),
+        deleted: true,
+        deletedAt,
+        deletedBy: operatorId,
+      },
+      ipAddress,
+      userAgent,
+    })
+    await categoryRuleRepository.deleteCategoryRule({
+      connection,
+      ruleId,
+    })
+    await connection.commit()
+
+    return {
+      id: ruleId,
+    }
+  } catch (error) {
+    await connection.rollback()
+    throw error
+  } finally {
+    connection.release()
+  }
+}
+
 async function getCategoryRuleSummary() {
   const summary = await categoryRuleRepository.getSummary()
 
@@ -417,6 +475,7 @@ module.exports = {
   createCategoryRule,
   updateCategoryRule,
   updateCategoryRuleStatus,
+  deleteCategoryRule,
   listCategoryRules,
   getCategoryRuleSummary,
 }
