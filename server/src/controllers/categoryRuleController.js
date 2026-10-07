@@ -44,8 +44,28 @@ async function create(req, res, next) {
   }
 }
 
+async function update(req, res, next) {
+  try {
+    const result = await categoryRuleService.updateCategoryRule({
+      ruleId: req.params.ruleId,
+      input: req.body,
+      operatorId: req.user.id,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
+    })
+
+    res.json({
+      success: true,
+      data: result,
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
 module.exports = {
   create,
+  update,
   list,
   getSummary,
 }

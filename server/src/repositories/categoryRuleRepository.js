@@ -164,10 +164,76 @@ async function findById({
   return rows[0] || null
 }
 
+async function findByIdForUpdate({
+  connection = pool,
+  ruleId,
+}) {
+  const [rows] = await connection.execute(
+    `SELECT id,
+            rule_name,
+            keyword,
+            category_result,
+            is_active,
+            created_by,
+            created_at,
+            updated_at
+       FROM category_rules
+      WHERE id = ?
+      FOR UPDATE`,
+    [ruleId],
+  )
+
+  return rows[0] || null
+}
+
+async function findOtherRulesForUpdate({
+  connection = pool,
+  ruleId,
+}) {
+  const [rows] = await connection.execute(
+    `SELECT id,
+            rule_name AS ruleName,
+            keyword,
+            category_result AS categoryResult,
+            is_active AS isActive
+       FROM category_rules
+      WHERE id <> ?
+      ORDER BY id ASC
+      FOR UPDATE`,
+    [ruleId],
+  )
+
+  return rows
+}
+
+async function updateCategoryRule({
+  connection = pool,
+  ruleId,
+  ruleName,
+  keyword,
+  categoryResult,
+}) {
+  await connection.execute(
+    `UPDATE category_rules
+        SET rule_name = ?,
+            keyword = ?,
+            category_result = ?
+      WHERE id = ?`,
+    [
+      ruleName,
+      keyword,
+      categoryResult,
+      ruleId,
+    ],
+  )
+}
+
 async function createOperationLog({
   connection = pool,
   operatorId,
   ruleId,
+  operationType,
+  beforeData = null,
   afterData,
   ipAddress = null,
   userAgent = null,
@@ -184,10 +250,12 @@ async function createOperationLog({
         ip_address,
         user_agent
       )
-     VALUES (?, 'create_category_rule', 'category_rule', ?, NULL, ?, ?, ?)`,
+     VALUES (?, ?, 'category_rule', ?, ?, ?, ?, ?)`,
     [
       operatorId,
+      operationType,
       ruleId,
+      beforeData ? JSON.stringify(beforeData) : null,
       JSON.stringify(afterData),
       ipAddress,
       userAgent,
@@ -235,8 +303,11 @@ module.exports = {
   findRulesForUpdate,
   findPage,
   findById,
+  findByIdForUpdate,
+  findOtherRulesForUpdate,
   getSummary,
   createCategoryRule,
+  updateCategoryRule,
   createOperationLog,
   updateItemCategory,
 }

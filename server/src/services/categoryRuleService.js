@@ -30,6 +30,20 @@ function parsePositiveInteger(value, fallback) {
   return parsed
 }
 
+function parseRuleId(value) {
+  if (typeof value !== 'string' || !/^\d+$/.test(value)) {
+    throw badRequest('规则 ID 无效')
+  }
+
+  const ruleId = Number(value)
+
+  if (!Number.isSafeInteger(ruleId) || ruleId <= 0) {
+    throw badRequest('规则 ID 无效')
+  }
+
+  return ruleId
+}
+
 function parseIsActive(value) {
   if (value === undefined || value === '') {
     return undefined
@@ -106,6 +120,12 @@ function normalizeCreateIsActive(value) {
   }
 
   return value
+}
+
+function assertStatusIsNotUpdated(input) {
+  if (Object.prototype.hasOwnProperty.call(input, 'isActive')) {
+    throw badRequest('启用状态请通过状态切换接口修改')
+  }
 }
 
 function normalizeRuleKeyword(value) {
@@ -205,6 +225,7 @@ async function createCategoryRule({
       connection,
       operatorId,
       ruleId,
+      operationType: 'create_category_rule',
       afterData: mapRule(createdRule),
       ipAddress,
       userAgent,
@@ -212,6 +233,83 @@ async function createCategoryRule({
     await connection.commit()
 
     return mapRule(createdRule)
+  } catch (error) {
+    await connection.rollback()
+    throw error
+  } finally {
+    connection.release()
+  }
+}
+
+async function updateCategoryRule({
+  ruleId: rawRuleId,
+  input,
+  operatorId,
+  ipAddress,
+  userAgent,
+}) {
+  const ruleId = parseRuleId(rawRuleId)
+  const source = input && typeof input === 'object' ? input : {}
+
+  assertStatusIsNotUpdated(source)
+
+  const ruleName = normalizeRequiredText(source.ruleName, '规则名称')
+  const keyword = normalizeRequiredText(source.keyword, '关键词')
+  const categoryResult = normalizeRequiredCategoryResult(source.categoryResult)
+  const connection = await pool.getConnection()
+
+  try {
+    await connection.beginTransaction()
+
+    const currentRule = await categoryRuleRepository.findByIdForUpdate({
+      connection,
+      ruleId,
+    })
+
+    if (!currentRule) {
+      const error = new Error('规则不存在')
+      error.statusCode = 404
+      error.expose = true
+      throw error
+    }
+
+    const otherRules = await categoryRuleRepository.findOtherRulesForUpdate({
+      connection,
+      ruleId,
+    })
+    const duplicateRule = findDuplicateKeyword(keyword, otherRules)
+
+    if (duplicateRule) {
+      throw conflict(
+        `关键词“${keyword}”与规则“${duplicateRule.ruleName}”（关键词：${duplicateRule.keyword}）重复`,
+      )
+    }
+
+    await categoryRuleRepository.updateCategoryRule({
+      connection,
+      ruleId,
+      ruleName,
+      keyword,
+      categoryResult,
+    })
+    const updatedRule = await categoryRuleRepository.findById({
+      connection,
+      ruleId,
+    })
+
+    await categoryRuleRepository.createOperationLog({
+      connection,
+      operatorId,
+      ruleId,
+      operationType: 'update_category_rule',
+      beforeData: mapRule(currentRule),
+      afterData: mapRule(updatedRule),
+      ipAddress,
+      userAgent,
+    })
+    await connection.commit()
+
+    return mapRule(updatedRule)
   } catch (error) {
     await connection.rollback()
     throw error
@@ -233,6 +331,7 @@ async function getCategoryRuleSummary() {
 
 module.exports = {
   createCategoryRule,
+  updateCategoryRule,
   listCategoryRules,
   getCategoryRuleSummary,
 }

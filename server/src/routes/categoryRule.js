@@ -8,5 +8,6 @@ router.use(authMiddleware)
 router.get('/summary', controller.getSummary)
 router.get('/', controller.list)
 router.post('/', controller.create)
+router.patch('/:ruleId', controller.update)
 
 module.exports = router
