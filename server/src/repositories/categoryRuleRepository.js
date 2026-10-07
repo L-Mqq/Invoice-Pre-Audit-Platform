@@ -95,7 +95,7 @@ async function getSummary() {
   return rows[0]
 }
 
-async function findActiveRulesForUpdate({
+async function findRulesForUpdate({
   connection = pool,
 }) {
   const [rows] = await connection.execute(
@@ -106,8 +106,7 @@ async function findActiveRulesForUpdate({
             priority,
             is_active AS isActive
        FROM category_rules
-      WHERE is_active = TRUE
-      ORDER BY priority ASC, id ASC
+      ORDER BY id ASC
       FOR UPDATE`,
   )
 
@@ -233,7 +232,7 @@ async function updateItemCategory({
 
 module.exports = {
   findActiveRules,
-  findActiveRulesForUpdate,
+  findRulesForUpdate,
   findPage,
   findById,
   getSummary,

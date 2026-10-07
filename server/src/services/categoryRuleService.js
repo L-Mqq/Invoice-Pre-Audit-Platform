@@ -112,15 +112,13 @@ function normalizeRuleKeyword(value) {
   return String(value || '').trim().toLowerCase().replace(/[\s　]+/g, '')
 }
 
-function findKeywordConflict(keyword, rules) {
+function findDuplicateKeyword(keyword, rules) {
   const normalizedKeyword = normalizeRuleKeyword(keyword)
 
   return rules.find((rule) => {
     const existingKeyword = normalizeRuleKeyword(rule.keyword)
 
     return normalizedKeyword === existingKeyword
-      || normalizedKeyword.includes(existingKeyword)
-      || existingKeyword.includes(normalizedKeyword)
   }) || null
 }
 
@@ -179,17 +177,15 @@ async function createCategoryRule({
   try {
     await connection.beginTransaction()
 
-    if (isActive) {
-      const activeRules = await categoryRuleRepository.findActiveRulesForUpdate({
-        connection,
-      })
-      const conflictingRule = findKeywordConflict(keyword, activeRules)
+    const rules = await categoryRuleRepository.findRulesForUpdate({
+      connection,
+    })
+    const duplicateRule = findDuplicateKeyword(keyword, rules)
 
-      if (conflictingRule) {
-        throw conflict(
-          `关键词“${keyword}”与启用规则“${conflictingRule.ruleName}”（关键词：${conflictingRule.keyword}）存在匹配范围冲突`,
-        )
-      }
+    if (duplicateRule) {
+      throw conflict(
+        `关键词“${keyword}”与规则“${duplicateRule.ruleName}”（关键词：${duplicateRule.keyword}）重复`,
+      )
     }
 
     const ruleId = await categoryRuleRepository.createCategoryRule({
