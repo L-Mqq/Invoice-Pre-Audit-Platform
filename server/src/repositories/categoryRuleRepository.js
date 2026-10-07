@@ -32,6 +32,47 @@ function createFilter({
   }
 }
 
+function createLogFilter({
+  ruleId,
+  operatorId,
+  operationType,
+  startAt,
+  endAt,
+}) {
+  const whereClauses = ["l.resource_type = 'category_rule'"]
+  const parameters = []
+
+  if (ruleId !== undefined) {
+    whereClauses.push('l.resource_id = ?')
+    parameters.push(ruleId)
+  }
+
+  if (operatorId !== undefined) {
+    whereClauses.push('l.operator_id = ?')
+    parameters.push(operatorId)
+  }
+
+  if (operationType) {
+    whereClauses.push('l.operation_type = ?')
+    parameters.push(operationType)
+  }
+
+  if (startAt) {
+    whereClauses.push('l.created_at >= ?')
+    parameters.push(startAt)
+  }
+
+  if (endAt) {
+    whereClauses.push('l.created_at <= ?')
+    parameters.push(endAt)
+  }
+
+  return {
+    whereSql: `WHERE ${whereClauses.join(' AND ')}`,
+    parameters,
+  }
+}
+
 async function findPage({
   page,
   pageSize,
@@ -72,6 +113,65 @@ async function findPage({
     pool.execute(
       `SELECT COUNT(*) AS total
          FROM category_rules
+         ${whereSql}`,
+      parameters,
+    ),
+  ])
+
+  return {
+    rows: rowsResult[0],
+    total: Number(totalResult[0][0].total || 0),
+  }
+}
+
+async function findLogPage({
+  page,
+  pageSize,
+  ruleId,
+  operatorId,
+  operationType,
+  startAt,
+  endAt,
+}) {
+  const {
+    whereSql,
+    parameters,
+  } = createLogFilter({
+    ruleId,
+    operatorId,
+    operationType,
+    startAt,
+    endAt,
+  })
+  const offset = (page - 1) * pageSize
+
+  const [rowsResult, totalResult] = await Promise.all([
+    pool.execute(
+      `SELECT l.id,
+              l.operation_type,
+              l.resource_id AS rule_id,
+              l.operator_id,
+              u.username AS operator_name,
+              l.before_data,
+              l.after_data,
+              l.ip_address,
+              l.user_agent,
+              l.created_at
+         FROM operation_logs l
+         LEFT JOIN users u
+           ON u.id = l.operator_id
+         ${whereSql}
+        ORDER BY l.created_at DESC, l.id DESC
+        LIMIT ? OFFSET ?`,
+      [
+        ...parameters,
+        pageSize,
+        offset,
+      ],
+    ),
+    pool.execute(
+      `SELECT COUNT(*) AS total
+         FROM operation_logs l
          ${whereSql}`,
       parameters,
     ),
@@ -350,6 +450,7 @@ module.exports = {
   findActiveRules,
   findRulesForUpdate,
   findPage,
+  findLogPage,
   findById,
   findByIdForUpdate,
   findOtherRulesForUpdate,

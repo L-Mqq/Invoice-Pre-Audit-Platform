@@ -6,6 +6,13 @@ const {
   normalizeText,
 } = require('./categoryJudgmentService')
 
+const CATEGORY_RULE_LOG_OPERATIONS = new Set([
+  'create_category_rule',
+  'update_category_rule',
+  'update_category_rule_status',
+  'delete_category_rule',
+])
+
 function badRequest(message) {
   const error = new Error(message)
   error.statusCode = 400
@@ -48,6 +55,24 @@ function parseRuleId(value) {
   return ruleId
 }
 
+function parseOptionalPositiveInteger(value, parameterName) {
+  if (value === undefined || value === '') {
+    return undefined
+  }
+
+  if (typeof value !== 'string' || !/^\d+$/.test(value)) {
+    throw badRequest(`${parameterName}无效`)
+  }
+
+  const parsed = Number(value)
+
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw badRequest(`${parameterName}无效`)
+  }
+
+  return parsed
+}
+
 function parseIsActive(value) {
   if (value === undefined || value === '') {
     return undefined
@@ -86,6 +111,60 @@ function normalizeCategoryResult(value) {
   }
 
   return value
+}
+
+function normalizeLogOperation(value) {
+  if (value === undefined || value === '') {
+    return undefined
+  }
+
+  if (typeof value !== 'string' || !CATEGORY_RULE_LOG_OPERATIONS.has(value)) {
+    throw badRequest('操作类型参数无效')
+  }
+
+  return value
+}
+
+function normalizeLogTime(value, parameterName, endOfDay) {
+  if (value === undefined || value === '') {
+    return undefined
+  }
+
+  if (typeof value !== 'string') {
+    throw badRequest(`${parameterName}无效`)
+  }
+
+  const normalizedValue = value.trim()
+  const match = /^(\d{4}-\d{2}-\d{2})(?:[ T](\d{2}:\d{2}:\d{2}))?$/.exec(normalizedValue)
+
+  if (!match) {
+    throw badRequest(`${parameterName}格式无效`)
+  }
+
+  const time = match[2] || (endOfDay ? '23:59:59' : '00:00:00')
+  const parsed = new Date(`${match[1]}T${time}+08:00`)
+
+  if (Number.isNaN(parsed.getTime())) {
+    throw badRequest(`${parameterName}格式无效`)
+  }
+
+  return `${match[1]} ${time}`
+}
+
+function parseLogData(value) {
+  if (value === null || value === undefined) {
+    return null
+  }
+
+  if (typeof value === 'object') {
+    return value
+  }
+
+  try {
+    return JSON.parse(value)
+  } catch {
+    return null
+  }
 }
 
 function normalizeRequiredText(value, fieldName) {
@@ -493,6 +572,51 @@ async function getCategoryRuleSummary() {
   }
 }
 
+async function listCategoryRuleLogs(query = {}) {
+  const page = parsePositiveInteger(query.page, 1)
+  const pageSize = Math.min(parsePositiveInteger(query.pageSize, 20), 100)
+  const ruleId = parseOptionalPositiveInteger(query.ruleId, '规则 ID')
+  const operatorId = parseOptionalPositiveInteger(query.operatorId, '操作人 ID')
+  const operationType = normalizeLogOperation(query.operationType)
+  const startAt = normalizeLogTime(query.startAt, '开始时间', false)
+  const endAt = normalizeLogTime(query.endAt, '结束时间', true)
+
+  if (startAt && endAt && startAt > endAt) {
+    throw badRequest('开始时间不能晚于结束时间')
+  }
+
+  const result = await categoryRuleRepository.findLogPage({
+    page,
+    pageSize,
+    ruleId,
+    operatorId,
+    operationType,
+    startAt,
+    endAt,
+  })
+
+  return {
+    items: result.rows.map((row) => ({
+      id: row.id,
+      ruleId: row.rule_id,
+      operationType: row.operation_type,
+      operatorId: row.operator_id,
+      operatorName: row.operator_name,
+      beforeData: parseLogData(row.before_data),
+      afterData: parseLogData(row.after_data),
+      ipAddress: row.ip_address,
+      userAgent: row.user_agent,
+      createdAt: row.created_at,
+    })),
+    pagination: {
+      page,
+      pageSize,
+      total: result.total,
+      totalPages: Math.ceil(result.total / pageSize),
+    },
+  }
+}
+
 async function testCategoryRuleMatch({
   itemName,
 }) {
@@ -533,5 +657,6 @@ module.exports = {
   testCategoryRuleMatch,
   deleteCategoryRule,
   listCategoryRules,
+  listCategoryRuleLogs,
   getCategoryRuleSummary,
 }

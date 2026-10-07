@@ -26,6 +26,19 @@ async function getSummary(req, res, next) {
   }
 }
 
+async function listLogs(req, res, next) {
+  try {
+    const result = await categoryRuleService.listCategoryRuleLogs(req.query)
+
+    res.json({
+      success: true,
+      data: result,
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
 async function create(req, res, next) {
   try {
     const result = await categoryRuleService.createCategoryRule({
@@ -122,5 +135,6 @@ module.exports = {
   updateStatus,
   remove,
   list,
+  listLogs,
   getSummary,
 }
