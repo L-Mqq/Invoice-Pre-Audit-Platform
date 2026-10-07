@@ -1,6 +1,10 @@
 const categoryRuleRepository = require('../repositories/categoryRuleRepository')
 const { validateCategoryResult } = require('../validators/categoryJudgmentValidator')
 const { pool } = require('../config/database')
+const {
+  findRule,
+  normalizeText,
+} = require('./categoryJudgmentService')
 
 function badRequest(message) {
   const error = new Error(message)
@@ -100,6 +104,24 @@ function normalizeRequiredText(value, fieldName) {
   }
 
   return normalizedValue
+}
+
+function normalizeItemName(value) {
+  if (typeof value !== 'string') {
+    throw badRequest('商品名称不能为空')
+  }
+
+  const itemName = value.trim()
+
+  if (!itemName) {
+    throw badRequest('商品名称不能为空')
+  }
+
+  if (itemName.length > 255) {
+    throw badRequest('商品名称不能超过 255 个字符')
+  }
+
+  return itemName
 }
 
 function normalizeRequiredCategoryResult(value) {
@@ -471,10 +493,44 @@ async function getCategoryRuleSummary() {
   }
 }
 
+async function testCategoryRuleMatch({
+  itemName,
+}) {
+  const normalizedItemName = normalizeItemName(itemName)
+  const activeRules = await categoryRuleRepository.findActiveRules()
+  const matchedRule = findRule(normalizedItemName, activeRules)
+
+  if (!matchedRule) {
+    return {
+      itemName: normalizedItemName,
+      normalizedItemName: normalizeText(normalizedItemName),
+      matchedRule: null,
+      categoryResult: null,
+      source: 'ai_fallback_required',
+      message: '未命中启用规则；实际审核时将进入 AI 辅助判断，当前测试不会调用 AI',
+    }
+  }
+
+  return {
+    itemName: normalizedItemName,
+    normalizedItemName: normalizeText(normalizedItemName),
+    matchedRule: {
+      id: matchedRule.id,
+      ruleName: matchedRule.ruleName,
+      keyword: matchedRule.keyword,
+      categoryResult: matchedRule.categoryResult,
+    },
+    categoryResult: matchedRule.categoryResult,
+    source: 'rule',
+    message: `命中规则“${matchedRule.ruleName}”（关键词：${matchedRule.keyword}）`,
+  }
+}
+
 module.exports = {
   createCategoryRule,
   updateCategoryRule,
   updateCategoryRuleStatus,
+  testCategoryRuleMatch,
   deleteCategoryRule,
   listCategoryRules,
   getCategoryRuleSummary,

@@ -44,6 +44,21 @@ async function create(req, res, next) {
   }
 }
 
+async function testMatch(req, res, next) {
+  try {
+    const result = await categoryRuleService.testCategoryRuleMatch({
+      itemName: req.body?.itemName,
+    })
+
+    res.json({
+      success: true,
+      data: result,
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
 async function update(req, res, next) {
   try {
     const result = await categoryRuleService.updateCategoryRule({
@@ -102,6 +117,7 @@ async function remove(req, res, next) {
 
 module.exports = {
   create,
+  testMatch,
   update,
   updateStatus,
   remove,
