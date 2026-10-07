@@ -122,6 +122,14 @@ function normalizeCreateIsActive(value) {
   return value
 }
 
+function normalizeRequiredIsActive(value) {
+  if (typeof value !== 'boolean') {
+    throw badRequest('启用状态必须为布尔值')
+  }
+
+  return value
+}
+
 function assertStatusIsNotUpdated(input) {
   if (Object.prototype.hasOwnProperty.call(input, 'isActive')) {
     throw badRequest('启用状态请通过状态切换接口修改')
@@ -318,6 +326,82 @@ async function updateCategoryRule({
   }
 }
 
+async function updateCategoryRuleStatus({
+  ruleId: rawRuleId,
+  isActive: rawIsActive,
+  operatorId,
+  ipAddress,
+  userAgent,
+}) {
+  const ruleId = parseRuleId(rawRuleId)
+  const isActive = normalizeRequiredIsActive(rawIsActive)
+  const connection = await pool.getConnection()
+
+  try {
+    await connection.beginTransaction()
+
+    const currentRule = await categoryRuleRepository.findByIdForUpdate({
+      connection,
+      ruleId,
+    })
+
+    if (!currentRule) {
+      const error = new Error('规则不存在')
+      error.statusCode = 404
+      error.expose = true
+      throw error
+    }
+
+    if (Boolean(currentRule.is_active) === isActive) {
+      await connection.commit()
+      return mapRule(currentRule)
+    }
+
+    if (isActive) {
+      const activeRules = await categoryRuleRepository.findOtherActiveRulesForUpdate({
+        connection,
+        ruleId,
+      })
+      const duplicateRule = findDuplicateKeyword(currentRule.keyword, activeRules)
+
+      if (duplicateRule) {
+        throw conflict(
+          `关键词“${currentRule.keyword}”与启用规则“${duplicateRule.ruleName}”（关键词：${duplicateRule.keyword}）重复，无法启用`,
+        )
+      }
+    }
+
+    await categoryRuleRepository.updateCategoryRuleStatus({
+      connection,
+      ruleId,
+      isActive,
+    })
+    const updatedRule = await categoryRuleRepository.findById({
+      connection,
+      ruleId,
+    })
+
+    await categoryRuleRepository.createOperationLog({
+      connection,
+      operatorId,
+      ruleId,
+      operationType: 'update_category_rule_status',
+      beforeData: mapRule(currentRule),
+      afterData: mapRule(updatedRule),
+      ipAddress,
+      userAgent,
+    })
+    await connection.commit()
+
+    return mapRule(updatedRule)
+  } catch (error) {
+    await connection.rollback()
+    throw error
+  } finally {
+    connection.release()
+  }
+}
+
 async function getCategoryRuleSummary() {
   const summary = await categoryRuleRepository.getSummary()
 
@@ -332,6 +416,7 @@ async function getCategoryRuleSummary() {
 module.exports = {
   createCategoryRule,
   updateCategoryRule,
+  updateCategoryRuleStatus,
   listCategoryRules,
   getCategoryRuleSummary,
 }

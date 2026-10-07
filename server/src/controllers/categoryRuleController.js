@@ -63,9 +63,29 @@ async function update(req, res, next) {
   }
 }
 
+async function updateStatus(req, res, next) {
+  try {
+    const result = await categoryRuleService.updateCategoryRuleStatus({
+      ruleId: req.params.ruleId,
+      isActive: req.body?.isActive,
+      operatorId: req.user.id,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
+    })
+
+    res.json({
+      success: true,
+      data: result,
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
 module.exports = {
   create,
   update,
+  updateStatus,
   list,
   getSummary,
 }
