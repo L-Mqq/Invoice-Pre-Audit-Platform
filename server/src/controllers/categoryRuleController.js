@@ -26,7 +26,26 @@ async function getSummary(req, res, next) {
   }
 }
 
+async function create(req, res, next) {
+  try {
+    const result = await categoryRuleService.createCategoryRule({
+      input: req.body,
+      operatorId: req.user.id,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
+    })
+
+    res.status(201).json({
+      success: true,
+      data: result,
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
 module.exports = {
+  create,
   list,
   getSummary,
 }

@@ -95,6 +95,107 @@ async function getSummary() {
   return rows[0]
 }
 
+async function findActiveRulesForUpdate({
+  connection = pool,
+}) {
+  const [rows] = await connection.execute(
+    `SELECT id,
+            rule_name AS ruleName,
+            keyword,
+            category_result AS categoryResult,
+            priority,
+            is_active AS isActive
+       FROM category_rules
+      WHERE is_active = TRUE
+      ORDER BY priority ASC, id ASC
+      FOR UPDATE`,
+  )
+
+  return rows
+}
+
+async function createCategoryRule({
+  connection = pool,
+  ruleName,
+  keyword,
+  categoryResult,
+  isActive,
+  createdBy,
+}) {
+  const [result] = await connection.execute(
+    `INSERT INTO category_rules
+      (
+        rule_name,
+        keyword,
+        category_result,
+        is_active,
+        created_by
+      )
+     VALUES (?, ?, ?, ?, ?)`,
+    [
+      ruleName,
+      keyword,
+      categoryResult,
+      isActive,
+      createdBy,
+    ],
+  )
+
+  return result.insertId
+}
+
+async function findById({
+  connection = pool,
+  ruleId,
+}) {
+  const [rows] = await connection.execute(
+    `SELECT id,
+            rule_name,
+            keyword,
+            category_result,
+            is_active,
+            created_by,
+            created_at,
+            updated_at
+       FROM category_rules
+      WHERE id = ?`,
+    [ruleId],
+  )
+
+  return rows[0] || null
+}
+
+async function createOperationLog({
+  connection = pool,
+  operatorId,
+  ruleId,
+  afterData,
+  ipAddress = null,
+  userAgent = null,
+}) {
+  await connection.execute(
+    `INSERT INTO operation_logs
+      (
+        operator_id,
+        operation_type,
+        resource_type,
+        resource_id,
+        before_data,
+        after_data,
+        ip_address,
+        user_agent
+      )
+     VALUES (?, 'create_category_rule', 'category_rule', ?, NULL, ?, ?, ?)`,
+    [
+      operatorId,
+      ruleId,
+      JSON.stringify(afterData),
+      ipAddress,
+      userAgent,
+    ],
+  )
+}
+
 // 查询启用规则；
 async function findActiveRules({ connection = pool } = {}) {
   const [rows] = await connection.execute(
@@ -132,7 +233,11 @@ async function updateItemCategory({
 
 module.exports = {
   findActiveRules,
+  findActiveRulesForUpdate,
   findPage,
+  findById,
   getSummary,
+  createCategoryRule,
+  createOperationLog,
   updateItemCategory,
 }
