@@ -367,6 +367,29 @@ async function findByRuleName({
   return rows
 }
 
+async function findByRuleNameForUpdate({
+  connection = pool,
+  ruleName,
+}) {
+  const [rows] = await connection.execute(
+    `SELECT id,
+            rule_name,
+            keyword,
+            category_result,
+            is_active,
+            created_by,
+            created_at,
+            updated_at
+       FROM category_rules
+      WHERE rule_name = ?
+      ORDER BY priority ASC, id ASC
+      FOR UPDATE`,
+    [ruleName],
+  )
+
+  return rows
+}
+
 async function findOtherRulesForUpdate({
   connection = pool,
   ruleId,
@@ -509,6 +532,17 @@ async function deleteCategoryRules({
   )
 }
 
+async function deleteCategoryRuleGroup({
+  connection = pool,
+  ruleName,
+}) {
+  await connection.execute(
+    `DELETE FROM category_rules
+      WHERE rule_name = ?`,
+    [ruleName],
+  )
+}
+
 async function createOperationLog({
   connection = pool,
   operatorId,
@@ -587,6 +621,7 @@ module.exports = {
   findById,
   findByIdForUpdate,
   findByRuleName,
+  findByRuleNameForUpdate,
   findOtherRulesForUpdate,
   findOtherActiveRulesForUpdate,
   findRuleNameOptions,
@@ -598,6 +633,7 @@ module.exports = {
   updateCategoryRuleStatus,
   deleteCategoryRule,
   deleteCategoryRules,
+  deleteCategoryRuleGroup,
   createOperationLog,
   updateItemCategory,
 }

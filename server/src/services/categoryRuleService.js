@@ -12,6 +12,7 @@ const CATEGORY_RULE_LOG_OPERATIONS = new Set([
   'update_category_rule_group',
   'update_category_rule_status',
   'delete_category_rule',
+  'delete_category_rule_group',
 ])
 
 function badRequest(message) {
@@ -767,6 +768,75 @@ async function deleteCategoryRule({
   }
 }
 
+async function deleteCategoryRuleGroup({
+  ruleId: rawRuleId,
+  operatorId,
+  ipAddress,
+  userAgent,
+}) {
+  const ruleId = parseRuleId(rawRuleId)
+  const connection = await pool.getConnection()
+
+  try {
+    await connection.beginTransaction()
+
+    const currentRule = await categoryRuleRepository.findByIdForUpdate({
+      connection,
+      ruleId,
+    })
+
+    if (!currentRule) {
+      const error = new Error('规则不存在')
+      error.statusCode = 404
+      error.expose = true
+      throw error
+    }
+
+    const groupRules = await categoryRuleRepository.findByRuleNameForUpdate({
+      connection,
+      ruleName: currentRule.rule_name,
+    })
+    const deletedRuleIds = groupRules.map((rule) => rule.id)
+    const deletedKeywords = groupRules.map((rule) => rule.keyword)
+    const deletedAt = new Date().toISOString()
+    const beforeData = createRuleGroupSnapshot(groupRules)
+
+    await categoryRuleRepository.createOperationLog({
+      connection,
+      operatorId,
+      ruleId,
+      operationType: 'delete_category_rule_group',
+      beforeData,
+      afterData: {
+        ...beforeData,
+        deleted: true,
+        deletedAt,
+        deletedBy: operatorId,
+        deletedRuleIds,
+        deletedKeywords,
+      },
+      ipAddress,
+      userAgent,
+    })
+    await categoryRuleRepository.deleteCategoryRuleGroup({
+      connection,
+      ruleName: currentRule.rule_name,
+    })
+    await connection.commit()
+
+    return {
+      ruleName: currentRule.rule_name,
+      deletedRuleIds,
+      deletedKeywords,
+    }
+  } catch (error) {
+    await connection.rollback()
+    throw error
+  } finally {
+    connection.release()
+  }
+}
+
 async function getCategoryRuleSummary() {
   const summary = await categoryRuleRepository.getSummary()
 
@@ -864,6 +934,7 @@ module.exports = {
   updateCategoryRuleStatus,
   testCategoryRuleMatch,
   deleteCategoryRule,
+  deleteCategoryRuleGroup,
   listCategoryRules,
   listCategoryRuleNameOptions,
   listCategoryRuleLogs,

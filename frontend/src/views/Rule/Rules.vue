@@ -69,7 +69,7 @@ const {
 const {
   createRule,
   deletingId,
-  removeRule,
+  removeRuleGroup,
   submitting,
   updateRuleGroup,
   updateStatus,
@@ -167,18 +167,29 @@ async function handleRuleStatusUpdate(group: RuleGroup, isActive: boolean) {
 
 async function handleRuleRemove(group: RuleGroup) {
   try {
+    const isKeywordSubsetDisplayed = Boolean(
+      filters.value.keyword || filters.value.isActive !== '',
+    )
+    const keywordDescription = isKeywordSubsetDisplayed
+      ? '将永久删除该组全部关键词，无法恢复。'
+      : `将永久删除 ${group.keywords.length} 个关键词（${group.keywords.join('、')}），无法恢复。`
+
     await ElMessageBox.confirm(
-      `确认删除规则“${group.ruleName}”吗？此操作不可恢复。`,
-      '删除规则',
+      `确定删除“${group.ruleName}”规则组？${keywordDescription}`,
+      '删除规则组',
       {
         confirmButtonText: '删除',
         cancelButtonText: '取消',
         type: 'warning',
       },
     )
-    await removeRule(group.id)
-    ElMessage.success('规则已删除')
+    await removeRuleGroup(group.id)
+    ElMessage.success('规则组已删除')
     await refreshRuleData()
+
+    if (rules.value.length === 0 && page.value > 1 && total.value > 0) {
+      await changePage(page.value - 1)
+    }
   } catch (error) {
     if (error instanceof Error && error.message !== 'cancel') {
       ElMessage.error(error.message)

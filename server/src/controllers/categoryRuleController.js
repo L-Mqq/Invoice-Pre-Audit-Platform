@@ -160,6 +160,24 @@ async function remove(req, res, next) {
   }
 }
 
+async function removeGroup(req, res, next) {
+  try {
+    const result = await categoryRuleService.deleteCategoryRuleGroup({
+      ruleId: req.params.ruleId,
+      operatorId: req.user.id,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
+    })
+
+    res.json({
+      success: true,
+      data: result,
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
 module.exports = {
   create,
   testMatch,
@@ -167,6 +185,7 @@ module.exports = {
   updateGroup,
   updateStatus,
   remove,
+  removeGroup,
   list,
   listNameOptions,
   listLogs,

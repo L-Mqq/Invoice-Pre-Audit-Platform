@@ -8,6 +8,7 @@ export type CategoryRuleOperation =
   | 'update_category_rule_group'
   | 'update_category_rule_status'
   | 'delete_category_rule'
+  | 'delete_category_rule_group'
 
 export interface CategoryRule {
   id: number
@@ -73,6 +74,12 @@ export interface CategoryRuleGroup {
   categoryResult: CategoryResult
   isActive: boolean
   keywords: string[]
+}
+
+export interface CategoryRuleGroupDeleteResult {
+  ruleName: string
+  deletedRuleIds: number[]
+  deletedKeywords: string[]
 }
 
 export interface CategoryRuleTestResult {
@@ -263,6 +270,22 @@ export async function deleteCategoryRule(ruleId: number): Promise<void> {
     await http.delete(`/category-rules/${ruleId}`)
   } catch (error) {
     throw getErrorMessage(error, '删除规则失败')
+  }
+}
+
+// 删除同一规则名称下的全部关键词。
+export async function deleteCategoryRuleGroup(
+  ruleId: number,
+): Promise<CategoryRuleGroupDeleteResult> {
+  try {
+    const response = await http.delete<{
+      success: boolean
+      data: CategoryRuleGroupDeleteResult
+    }>(`/category-rules/${ruleId}/group`)
+
+    return response.data.data
+  } catch (error) {
+    throw getErrorMessage(error, '删除规则组失败')
   }
 }
 

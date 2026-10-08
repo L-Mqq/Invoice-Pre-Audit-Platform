@@ -14,6 +14,7 @@ router.post('/', controller.create)
 router.patch('/:ruleId/status', controller.updateStatus)
 router.patch('/:ruleId/group', controller.updateGroup)
 router.patch('/:ruleId', controller.update)
+router.delete('/:ruleId/group', controller.removeGroup)
 router.delete('/:ruleId', controller.remove)
 
 module.exports = router

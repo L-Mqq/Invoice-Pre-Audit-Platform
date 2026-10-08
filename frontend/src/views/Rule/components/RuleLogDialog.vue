@@ -25,6 +25,7 @@ function getOperationLabel(operation: CategoryRuleLogItem['operationType']) {
     update_category_rule_group: '编辑规则组',
     update_category_rule_status: '状态切换',
     delete_category_rule: '删除规则',
+    delete_category_rule_group: '删除规则组',
   }
 
   return labels[operation]
