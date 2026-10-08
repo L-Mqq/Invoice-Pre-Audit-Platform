@@ -5,7 +5,10 @@ import {
   createCategoryRule,
   deleteCategoryRule,
   updateCategoryRule,
+  updateCategoryRuleGroup,
   updateCategoryRuleStatus,
+  type CategoryRuleGroup,
+  type CategoryRuleGroupPayload,
   type CategoryRule,
   type CategoryRulePayload,
   type CreateCategoryRulePayload,
@@ -17,6 +20,7 @@ function getErrorMessage(error: unknown): string {
 
 export function useCategoryRuleActions() {
   const submitting = ref(false)
+  const updatingGroupId = ref<number | null>(null)
   const updatingStatusId = ref<number | null>(null)
   const deletingId = ref<number | null>(null)
 
@@ -46,6 +50,23 @@ export function useCategoryRuleActions() {
       throw new Error(getErrorMessage(error))
     } finally {
       submitting.value = false
+    }
+  }
+
+  async function updateRuleGroup(
+    ruleId: number,
+    payload: CategoryRuleGroupPayload,
+  ): Promise<CategoryRuleGroup> {
+    updatingGroupId.value = ruleId
+    submitting.value = true
+
+    try {
+      return await updateCategoryRuleGroup(ruleId, payload)
+    } catch (error) {
+      throw new Error(getErrorMessage(error))
+    } finally {
+      submitting.value = false
+      updatingGroupId.value = null
     }
   }
 
@@ -82,6 +103,8 @@ export function useCategoryRuleActions() {
     removeRule,
     submitting,
     updateRule,
+    updateRuleGroup,
+    updatingGroupId,
     updateStatus,
     updatingStatusId,
   }

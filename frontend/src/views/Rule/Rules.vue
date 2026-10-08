@@ -7,9 +7,6 @@ import {
   ElMessage,
   ElMessageBox,
 } from 'element-plus'
-import type {
-  CategoryRule,
-} from '../../apis/categoryRule'
 import RuleEditDialog, {
   type RuleFormValue,
 } from './components/RuleEditDialog.vue'
@@ -19,7 +16,9 @@ import RuleFilterBar, {
 import RuleFixedRules from './components/RuleFixedRules.vue'
 import RuleLogDialog from './components/RuleLogDialog.vue'
 import RuleStatsCards from './components/RuleStatsCards.vue'
-import RuleTable from './components/RuleTable.vue'
+import RuleTable, {
+  type RuleGroup,
+} from './components/RuleTable.vue'
 import RuleTestDialog from './components/RuleTestDialog.vue'
 import {
   useCategoryRuleActions,
@@ -42,10 +41,11 @@ import {
 
 const editDialogVisible = ref(false)
 const editMode = ref<'create' | 'edit'>('create')
-const selectedRule = ref<CategoryRule | null>(null)
+const selectedRule = ref<RuleFormValue | null>(null)
 
 const {
   changePage,
+  filters,
   loadError,
   loading: listLoading,
   loadRules,
@@ -71,7 +71,7 @@ const {
   deletingId,
   removeRule,
   submitting,
-  updateRule,
+  updateRuleGroup,
   updateStatus,
   updatingStatusId,
 } = useCategoryRuleActions()
@@ -95,6 +95,7 @@ async function refreshRuleData() {
   await Promise.all([
     loadRules(),
     loadSummary(),
+    loadRuleNameOptions(),
   ])
 }
 
@@ -105,30 +106,46 @@ function openCreateDialog() {
   void loadRuleNameOptions()
 }
 
-function openEditDialog(rule: CategoryRule) {
+function openEditDialog(group: RuleGroup) {
+  if (filters.value.keyword || filters.value.isActive !== '') {
+    ElMessage.warning('请先清除关键词和启用状态筛选，再编辑规则组，以确保加载完整关键词')
+    return
+  }
+
   editMode.value = 'edit'
-  selectedRule.value = rule
+  selectedRule.value = {
+    id: group.id,
+    ruleName: group.ruleName,
+    categoryResult: group.categoryResult,
+    keywords: [...group.keywords],
+  }
   editDialogVisible.value = true
-  void loadRuleNameOptions()
 }
 
 async function handleRuleSubmit(value: RuleFormValue) {
   try {
     if (editMode.value === 'create') {
+      const keyword = value.keywords[0]?.trim()
+
+      if (!keyword) {
+        ElMessage.error('请填写匹配关键词')
+        return
+      }
+
       await createRule({
         ruleName: value.ruleName,
-        keyword: value.keyword,
+        keyword,
         categoryResult: value.categoryResult,
         isActive: true,
       })
       ElMessage.success('规则新增成功')
     } else if (value.id) {
-      await updateRule(value.id, {
+      await updateRuleGroup(value.id, {
         ruleName: value.ruleName,
-        keyword: value.keyword,
         categoryResult: value.categoryResult,
+        keywords: value.keywords,
       })
-      ElMessage.success('规则编辑成功')
+      ElMessage.success('规则组编辑成功')
     }
 
     editDialogVisible.value = false
@@ -138,20 +155,20 @@ async function handleRuleSubmit(value: RuleFormValue) {
   }
 }
 
-async function handleRuleStatusUpdate(rule: CategoryRule, isActive: boolean) {
+async function handleRuleStatusUpdate(group: RuleGroup, isActive: boolean) {
   try {
-    const updatedRule = await updateStatus(rule.id, isActive)
-    rule.isActive = updatedRule.isActive
-    ElMessage.success(updatedRule.isActive ? '规则已启用' : '规则已停用')
+    await updateStatus(group.id, isActive)
+    ElMessage.success(isActive ? '规则已启用' : '规则已停用')
+    await loadRules()
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '更新规则状态失败')
   }
 }
 
-async function handleRuleRemove(rule: CategoryRule) {
+async function handleRuleRemove(group: RuleGroup) {
   try {
     await ElMessageBox.confirm(
-      `确认删除规则“${rule.ruleName}”吗？此操作不可恢复。`,
+      `确认删除规则“${group.ruleName}”吗？此操作不可恢复。`,
       '删除规则',
       {
         confirmButtonText: '删除',
@@ -159,7 +176,7 @@ async function handleRuleRemove(rule: CategoryRule) {
         type: 'warning',
       },
     )
-    await removeRule(rule.id)
+    await removeRule(group.id)
     ElMessage.success('规则已删除')
     await refreshRuleData()
   } catch (error) {

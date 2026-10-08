@@ -61,6 +61,20 @@ export interface CreateCategoryRulePayload extends CategoryRulePayload {
   isActive?: boolean
 }
 
+export interface CategoryRuleGroupPayload {
+  ruleName: string
+  categoryResult: CategoryResult
+  keywords: string[]
+}
+
+export interface CategoryRuleGroup {
+  id: number
+  ruleName: string
+  categoryResult: CategoryResult
+  isActive: boolean
+  keywords: string[]
+}
+
 export interface CategoryRuleTestResult {
   itemName: string
   normalizedItemName: string
@@ -204,6 +218,23 @@ export async function updateCategoryRule(
     return response.data.data
   } catch (error) {
     throw getErrorMessage(error, '编辑规则失败')
+  }
+}
+
+// 编辑同一规则名称下的全部关键词。
+export async function updateCategoryRuleGroup(
+  ruleId: number,
+  payload: CategoryRuleGroupPayload,
+): Promise<CategoryRuleGroup> {
+  try {
+    const response = await http.patch<{
+      success: boolean
+      data: CategoryRuleGroup
+    }>(`/category-rules/${ruleId}/group`, payload)
+
+    return response.data.data
+  } catch (error) {
+    throw getErrorMessage(error, '编辑规则组失败')
   }
 }
 

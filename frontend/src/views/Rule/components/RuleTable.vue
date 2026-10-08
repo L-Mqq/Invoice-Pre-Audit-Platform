@@ -7,9 +7,13 @@ import type {
   CategoryRule,
 } from '../../../apis/categoryRule'
 
-interface GroupedCategoryRule extends CategoryRule {
+export interface RuleGroup {
+  id: number
+  ruleName: string
   keywords: string[]
-  categoryResults: CategoryResult[]
+  categoryResult: CategoryResult
+  isActive: boolean
+  hasMixedStatus: boolean
 }
 
 const props = defineProps<{
@@ -23,10 +27,10 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  edit: [rule: CategoryRule]
-  remove: [rule: CategoryRule]
+  edit: [group: RuleGroup]
+  remove: [group: RuleGroup]
   showLogs: []
-  updateStatus: [rule: CategoryRule, isActive: boolean]
+  updateStatus: [group: RuleGroup, isActive: boolean]
   pageChange: [page: number]
 }>()
 
@@ -42,8 +46,8 @@ function getCategoryTagType(result: CategoryRule['categoryResult']) {
   return 'warning'
 }
 
-const groupedRules = computed<GroupedCategoryRule[]>(() => {
-  const ruleGroups = new Map<string, GroupedCategoryRule>()
+const groupedRules = computed<RuleGroup[]>(() => {
+  const ruleGroups = new Map<string, RuleGroup>()
 
   props.rules.forEach((rule) => {
     const existingRule = ruleGroups.get(rule.ruleName)
@@ -52,7 +56,7 @@ const groupedRules = computed<GroupedCategoryRule[]>(() => {
       ruleGroups.set(rule.ruleName, {
         ...rule,
         keywords: [rule.keyword],
-        categoryResults: [rule.categoryResult],
+        hasMixedStatus: false,
       })
       return
     }
@@ -61,8 +65,8 @@ const groupedRules = computed<GroupedCategoryRule[]>(() => {
       existingRule.keywords.push(rule.keyword)
     }
 
-    if (!existingRule.categoryResults.includes(rule.categoryResult)) {
-      existingRule.categoryResults.push(rule.categoryResult)
+    if (existingRule.isActive !== rule.isActive) {
+      existingRule.hasMixedStatus = true
     }
   })
 
@@ -125,13 +129,11 @@ const groupedRules = computed<GroupedCategoryRule[]>(() => {
       >
         <template #default="{ row }">
           <el-tag
-            v-for="categoryResult in row.categoryResults"
-            :key="`${row.id}-${categoryResult}`"
-            :type="getCategoryTagType(categoryResult)"
+            :type="getCategoryTagType(row.categoryResult)"
             effect="plain"
             class="category-tag"
           >
-            {{ categoryResult }}
+            {{ row.categoryResult }}
           </el-tag>
         </template>
       </el-table-column>

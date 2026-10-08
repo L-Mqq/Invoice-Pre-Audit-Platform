@@ -2,6 +2,7 @@
 import {
   computed,
   reactive,
+  ref,
   watch,
 } from 'vue'
 import type {
@@ -11,8 +12,8 @@ import type {
 export interface RuleFormValue {
   id?: number
   ruleName: string
-  keyword: string
   categoryResult: '可以' | '存疑' | '不可以'
+  keywords: string[]
 }
 
 const props = defineProps<{
@@ -32,9 +33,12 @@ const emit = defineEmits<{
 
 const form = reactive<RuleFormValue>({
   ruleName: '',
-  keyword: '',
   categoryResult: '可以',
+  keywords: [''],
 })
+
+const keywordInput = ref('')
+const keywordError = ref('')
 
 const matchedRuleNameOption = computed(() => {
   const ruleName = form.ruleName.trim()
@@ -53,8 +57,12 @@ const isExistingRuleNameSelected = computed(() => {
 function resetForm() {
   form.id = props.rule?.id
   form.ruleName = props.rule?.ruleName || ''
-  form.keyword = props.rule?.keyword || ''
   form.categoryResult = props.rule?.categoryResult || '可以'
+  form.keywords = props.rule?.keywords.length
+    ? [...props.rule.keywords]
+    : ['']
+  keywordInput.value = ''
+  keywordError.value = ''
 }
 
 function handleClose() {
@@ -62,12 +70,53 @@ function handleClose() {
 }
 
 function handleSubmit() {
+  const keywords = form.keywords
+    .map((keyword) => keyword.trim())
+    .filter(Boolean)
+
+  if (keywords.length === 0) {
+    keywordError.value = '请至少保留一个匹配关键词'
+    return
+  }
+
   emit('submit', {
     id: form.id,
     ruleName: form.ruleName.trim(),
-    keyword: form.keyword.trim(),
     categoryResult: form.categoryResult,
+    keywords,
   })
+}
+
+function normalizeKeyword(keyword: string) {
+  return keyword.trim().toLowerCase().replace(/[\s　]+/g, '')
+}
+
+function addKeyword() {
+  const keyword = keywordInput.value.trim()
+
+  if (!keyword) {
+    keywordError.value = '请输入关键词'
+    return
+  }
+
+  if (form.keywords.some((item) => normalizeKeyword(item) === normalizeKeyword(keyword))) {
+    keywordError.value = `关键词“${keyword}”重复`
+    return
+  }
+
+  form.keywords.push(keyword)
+  keywordInput.value = ''
+  keywordError.value = ''
+}
+
+function removeKeyword(index: number) {
+  if (form.keywords.length === 1) {
+    keywordError.value = '规则组至少保留一个关键词，暂不支持删除整条规则'
+    return
+  }
+
+  form.keywords.splice(index, 1)
+  keywordError.value = ''
 }
 
 function syncCategoryResult() {
@@ -108,6 +157,7 @@ watch(
     <el-form label-position="top">
       <el-form-item label="规则名称">
         <el-select
+          v-if="mode === 'create'"
           v-model="form.ruleName"
           filterable
           allow-create
@@ -131,6 +181,11 @@ watch(
             </div>
           </el-option>
         </el-select>
+        <el-input
+          v-else
+          :model-value="form.ruleName"
+          readonly
+        />
         <p
           v-if="isExistingRuleNameSelected"
           class="rule-name-hint"
@@ -138,11 +193,50 @@ watch(
           已选规则的品类结论为“{{ matchedRuleNameOption?.categoryResult }}”，不可修改。
         </p>
       </el-form-item>
-      <el-form-item label="匹配关键词">
+      <el-form-item
+        v-if="mode === 'create'"
+        label="匹配关键词"
+      >
         <el-input
-          v-model="form.keyword"
+          v-model="form.keywords[0]"
           placeholder="例如：A4打印纸"
         />
+      </el-form-item>
+      <el-form-item
+        v-else
+        label="匹配关键词"
+      >
+        <div class="keyword-editor">
+          <div class="keyword-tags">
+            <el-tag
+              v-for="(keyword, index) in form.keywords"
+              :key="keyword"
+              :closable="form.keywords.length > 1"
+              @close="removeKeyword(index)"
+            >
+              {{ keyword }}
+            </el-tag>
+          </div>
+          <div class="keyword-input-row">
+            <el-input
+              v-model="keywordInput"
+              placeholder="输入新关键词后添加"
+              @keyup.enter="addKeyword"
+            />
+            <el-button @click="addKeyword">
+              添加
+            </el-button>
+          </div>
+          <p class="keyword-hint">
+            关键词至少保留一个；删除最后一个关键词需等待规则组删除功能支持。
+          </p>
+          <p
+            v-if="keywordError"
+            class="keyword-error"
+          >
+            {{ keywordError }}
+          </p>
+        </div>
       </el-form-item>
       <el-form-item label="品类结论">
         <el-radio-group
@@ -165,7 +259,10 @@ watch(
       <el-button
         type="primary"
         :loading="submitting"
-        :disabled="!form.ruleName.trim() || !form.keyword.trim()"
+        :disabled="
+          !form.ruleName.trim()
+          || !form.keywords.some((keyword) => keyword.trim())
+        "
         @click="handleSubmit"
       >
         保存
@@ -190,5 +287,37 @@ watch(
   margin: 6px 0 0;
   color: #64748b;
   font-size: 12px;
+}
+
+.keyword-editor {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.keyword-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.keyword-input-row {
+  display: flex;
+  gap: 8px;
+}
+
+.keyword-hint,
+.keyword-error {
+  margin: 0;
+  font-size: 12px;
+}
+
+.keyword-hint {
+  color: #64748b;
+}
+
+.keyword-error {
+  color: #dc2626;
 }
 </style>
