@@ -90,19 +90,15 @@ async function findPage({
   })
   const offset = (page - 1) * pageSize
 
-  const [rowsResult, totalResult] = await Promise.all([
+  const [ruleNameResult, totalResult] = await Promise.all([
     pool.execute(
-      `SELECT id,
-              rule_name,
-              keyword,
-              category_result,
-              is_active,
-              created_by,
-              created_at,
-              updated_at
+      `SELECT rule_name,
+              MIN(priority) AS first_priority,
+              MIN(id) AS first_id
          FROM category_rules
          ${whereSql}
-        ORDER BY priority ASC, id ASC
+        GROUP BY rule_name
+        ORDER BY first_priority ASC, first_id ASC
         LIMIT ? OFFSET ?`,
       [
         ...parameters,
@@ -111,15 +107,46 @@ async function findPage({
       ],
     ),
     pool.execute(
-      `SELECT COUNT(*) AS total
+      `SELECT COUNT(DISTINCT rule_name) AS total
          FROM category_rules
          ${whereSql}`,
       parameters,
     ),
   ])
 
+  const ruleNames = ruleNameResult[0].map((row) => row.rule_name)
+
+  if (ruleNames.length === 0) {
+    return {
+      rows: [],
+      total: Number(totalResult[0][0].total || 0),
+    }
+  }
+
+  const ruleNamePlaceholders = ruleNames.map(() => '?').join(', ')
+  const selectedWhereSql = whereSql
+    ? `${whereSql} AND rule_name IN (${ruleNamePlaceholders})`
+    : `WHERE rule_name IN (${ruleNamePlaceholders})`
+  const [rows] = await pool.execute(
+    `SELECT id,
+            rule_name,
+            keyword,
+            category_result,
+            is_active,
+            created_by,
+            created_at,
+            updated_at
+       FROM category_rules
+       ${selectedWhereSql}
+      ORDER BY priority ASC, id ASC`,
+    [
+      ...parameters,
+      ...ruleNames,
+    ],
+  )
+
   return {
-    rows: rowsResult[0],
+    rows,
     total: Number(totalResult[0][0].total || 0),
   }
 }
@@ -185,11 +212,20 @@ async function findLogPage({
 
 async function getSummary() {
   const [rows] = await pool.execute(
-    `SELECT COUNT(*) AS total,
-            SUM(category_result = '可以') AS reimbursable_count,
-            SUM(category_result = '存疑') AS uncertain_count,
-            SUM(category_result = '不可以') AS non_reimbursable_count
-       FROM category_rules`,
+    `SELECT (
+              SELECT COUNT(*)
+                FROM category_rules
+            ) AS keyword_total,
+            COUNT(*) AS rule_total,
+            SUM(category_result = '可以') AS reimbursable_rule_count,
+            SUM(category_result = '存疑') AS uncertain_rule_count,
+            SUM(category_result = '不可以') AS non_reimbursable_rule_count
+       FROM (
+         SELECT rule_name,
+                MIN(category_result) AS category_result
+           FROM category_rules
+          GROUP BY rule_name
+       ) grouped_rules`,
   )
 
   return rows[0]

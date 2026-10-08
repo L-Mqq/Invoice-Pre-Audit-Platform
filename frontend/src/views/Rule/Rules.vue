@@ -1,66 +1,173 @@
 <script setup lang="ts">
 import {
+  onMounted,
   ref,
 } from 'vue'
+import {
+  ElMessage,
+  ElMessageBox,
+} from 'element-plus'
+import type {
+  CategoryRule,
+} from '../../apis/categoryRule'
+import RuleEditDialog, {
+  type RuleFormValue,
+} from './components/RuleEditDialog.vue'
+import RuleFilterBar, {
+  type RuleFilters,
+} from './components/RuleFilterBar.vue'
+import RuleFixedRules from './components/RuleFixedRules.vue'
+import RuleLogDialog from './components/RuleLogDialog.vue'
+import RuleStatsCards from './components/RuleStatsCards.vue'
+import RuleTable from './components/RuleTable.vue'
+import RuleTestDialog from './components/RuleTestDialog.vue'
+import {
+  useCategoryRuleActions,
+} from './composables/useCategoryRuleActions'
+import {
+  useCategoryRuleList,
+} from './composables/useCategoryRuleList'
+import {
+  useCategoryRuleLogs,
+} from './composables/useCategoryRuleLogs'
+import {
+  useCategoryRuleSummary,
+} from './composables/useCategoryRuleSummary'
+import {
+  useCategoryRuleTest,
+} from './composables/useCategoryRuleTest'
 
-interface CategoryRule {
-  id: number
-  ruleName: string
-  keyword: string
-  categoryResult: '可以' | '存疑' | '不可以'
-  isActive: boolean
+const editDialogVisible = ref(false)
+const editMode = ref<'create' | 'edit'>('create')
+const selectedRule = ref<CategoryRule | null>(null)
+
+const {
+  changePage,
+  loadError,
+  loading: listLoading,
+  loadRules,
+  page,
+  pageSize,
+  resetFilters,
+  rules,
+  searchRules,
+  total,
+} = useCategoryRuleList()
+const {
+  loadError: summaryLoadError,
+  loadSummary,
+  summary,
+} = useCategoryRuleSummary()
+const {
+  createRule,
+  deletingId,
+  removeRule,
+  submitting,
+  updateRule,
+  updateStatus,
+  updatingStatusId,
+} = useCategoryRuleActions()
+const {
+  error: testError,
+  loading: testLoading,
+  openTestDialog,
+  result: testResult,
+  testMatch,
+  visible: testDialogVisible,
+} = useCategoryRuleTest()
+const {
+  error: logError,
+  loading: logLoading,
+  logs,
+  openLogDialog,
+  visible: logDialogVisible,
+} = useCategoryRuleLogs()
+
+async function refreshRuleData() {
+  await Promise.all([
+    loadRules(),
+    loadSummary(),
+  ])
 }
 
-const categoryRules = ref<CategoryRule[]>([
-  {
-    id: 1,
-    ruleName: '办公用品',
-    keyword: 'A4纸',
-    categoryResult: '可以',
-    isActive: true,
-  },
-  {
-    id: 2,
-    ruleName: '电子设备',
-    keyword: '摄像头',
-    categoryResult: '不可以',
-    isActive: true,
-  },
-  {
-    id: 3,
-    ruleName: '网络设备',
-    keyword: '无线AP',
-    categoryResult: '可以',
-    isActive: true,
-  },
-  {
-    id: 4,
-    ruleName: '办公设备',
-    keyword: '打印机',
-    categoryResult: '不可以',
-    isActive: true,
-  },
-  {
-    id: 5,
-    ruleName: '专业工具',
-    keyword: '测量仪',
-    categoryResult: '存疑',
-    isActive: false,
-  },
-])
-
-function getCategoryTagType(result: CategoryRule['categoryResult']) {
-  if (result === '可以') {
-    return 'success'
-  }
-
-  if (result === '不可以') {
-    return 'danger'
-  }
-
-  return 'warning'
+function openCreateDialog() {
+  editMode.value = 'create'
+  selectedRule.value = null
+  editDialogVisible.value = true
 }
 
+function openEditDialog(rule: CategoryRule) {
+  editMode.value = 'edit'
+  selectedRule.value = rule
+  editDialogVisible.value = true
+}
+
+async function handleRuleSubmit(value: RuleFormValue) {
+  try {
+    if (editMode.value === 'create') {
+      await createRule({
+        ruleName: value.ruleName,
+        keyword: value.keyword,
+        categoryResult: value.categoryResult,
+        isActive: true,
+      })
+      ElMessage.success('规则新增成功')
+    } else if (value.id) {
+      await updateRule(value.id, {
+        ruleName: value.ruleName,
+        keyword: value.keyword,
+        categoryResult: value.categoryResult,
+      })
+      ElMessage.success('规则编辑成功')
+    }
+
+    editDialogVisible.value = false
+    await refreshRuleData()
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '保存规则失败')
+  }
+}
+
+async function handleRuleStatusUpdate(rule: CategoryRule, isActive: boolean) {
+  try {
+    const updatedRule = await updateStatus(rule.id, isActive)
+    rule.isActive = updatedRule.isActive
+    ElMessage.success(updatedRule.isActive ? '规则已启用' : '规则已停用')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '更新规则状态失败')
+  }
+}
+
+async function handleRuleRemove(rule: CategoryRule) {
+  try {
+    await ElMessageBox.confirm(
+      `确认删除规则“${rule.ruleName}”吗？此操作不可恢复。`,
+      '删除规则',
+      {
+        confirmButtonText: '删除',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+    await removeRule(rule.id)
+    ElMessage.success('规则已删除')
+    await refreshRuleData()
+  } catch (error) {
+    if (error instanceof Error && error.message !== 'cancel') {
+      ElMessage.error(error.message)
+    }
+  }
+}
+
+async function handleSearch(filters: RuleFilters) {
+  await searchRules(filters)
+}
+
+async function handleResetFilters() {
+  await resetFilters()
+}
+
+onMounted(refreshRuleData)
 </script>
 
 <template>
@@ -78,10 +185,13 @@ function getCategoryTagType(result: CategoryRule['categoryResult']) {
         </p>
       </div>
       <div class="heading-actions">
-        <el-button>
+        <el-button @click="openTestDialog">
           规则测试
         </el-button>
-        <el-button type="primary">
+        <el-button
+          type="primary"
+          @click="openCreateDialog"
+        >
           新增品类规则
         </el-button>
       </div>
@@ -94,227 +204,68 @@ function getCategoryTagType(result: CategoryRule['categoryResult']) {
       show-icon
     />
 
-    <div class="summary-grid">
-      <div class="summary-card">
-        <span>规则总数</span>
-        <strong>5</strong>
-        <small>含已停用规则</small>
-      </div>
-      <div class="summary-card approved">
-        <span>可报销规则</span>
-        <strong>2</strong>
-        <small>符合材料费报销条件</small>
-      </div>
-      <div class="summary-card uncertain">
-        <span>存疑规则</span>
-        <strong>1</strong>
-        <small>需管理员人工确认</small>
-      </div>
-      <div class="summary-card rejected">
-        <span>不可报销规则</span>
-        <strong>2</strong>
-        <small>不可按材料费报销</small>
-      </div>
-    </div>
+    <el-alert
+      v-if="loadError || summaryLoadError"
+      class="load-error"
+      :title="loadError || summaryLoadError"
+      type="error"
+      :closable="false"
+      show-icon
+    />
 
-    <el-card
-      class="filter-card"
-      shadow="never"
-    >
-      <div class="filter-heading">
-        <strong>筛选规则</strong>
-        <el-button link>
-          重置筛选
-        </el-button>
-      </div>
-      <div class="filter-grid">
-        <el-input
-          placeholder="搜索规则名称或关键词"
-          clearable
-        />
-        <el-select
-          placeholder="品类结论"
-          clearable
-        >
-          <el-option
-            label="可以"
-            value="可以"
-          />
-          <el-option
-            label="存疑"
-            value="存疑"
-          />
-          <el-option
-            label="不可以"
-            value="不可以"
-          />
-        </el-select>
-        <el-select
-          placeholder="启用状态"
-          clearable
-        >
-          <el-option
-            label="已启用"
-            value="active"
-          />
-          <el-option
-            label="已停用"
-            value="inactive"
-          />
-        </el-select>
-        <el-button type="primary">
-          查询
-        </el-button>
-      </div>
-    </el-card>
+    <RuleStatsCards
+      :rule-total="summary.ruleTotal"
+      :keyword-total="summary.keywordTotal"
+      :reimbursable-rule-count="summary.reimbursableRuleCount"
+      :uncertain-rule-count="summary.uncertainRuleCount"
+      :non-reimbursable-rule-count="summary.nonReimbursableRuleCount"
+    />
 
-    <el-card
-      class="table-card"
-      shadow="never"
-    >
-      <div class="table-heading">
-        <div>
-          <strong>
-            品类规则列表
-          </strong>
-          <span>
-            共 {{ categoryRules.length }} 条规则
-          </span>
-        </div>
-        <el-button link>
-          查看操作记录
-        </el-button>
-      </div>
+    <RuleFilterBar
+      :loading="listLoading"
+      @search="handleSearch"
+      @reset="handleResetFilters"
+    />
 
-      <el-table
-        :data="categoryRules"
-        stripe
-      >
-        <el-table-column
-          label="规则名称"
-          min-width="150"
-        >
-          <template #default="{ row }">
-            <strong>
-              {{ row.ruleName }}
-            </strong>
-          </template>
-        </el-table-column>
-        <el-table-column
-          prop="keyword"
-          label="匹配关键词"
-          min-width="160"
-        >
-          <template #default="{ row }">
-            <span class="keyword">
-              {{ row.keyword }}
-            </span>
-          </template>
-        </el-table-column>
-        <el-table-column
-          label="品类结论"
-          width="130"
-        >
-          <template #default="{ row }">
-            <el-tag
-              :type="getCategoryTagType(row.categoryResult)"
-              effect="plain"
-            >
-              {{ row.categoryResult }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column
-          label="状态"
-          width="90"
-        >
-          <template #default="{ row }">
-            <div class="status-control">
-              <el-switch
-                v-model="row.isActive"
-                aria-label="切换规则启用状态"
-              />
-              <span
-                class="status-text"
-                :class="{
-                  'is-active': row.isActive,
-                }"
-                :aria-label="row.isActive ? '启用' : '停用'"
-              ></span>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column
-          label="操作"
-          width="120"
-          fixed="right"
-        >
-          <template #default>
-            <el-button
-              link
-              type="primary"
-            >
-              编辑
-            </el-button>
-            <el-button
-              link
-              type="danger"
-            >
-              删除
-            </el-button>
-          </template>
-        </el-table-column>
-      </el-table>
+    <RuleTable
+      :rules="rules"
+      :loading="listLoading"
+      :page="page"
+      :page-size="pageSize"
+      :total="total"
+      :updating-status-id="updatingStatusId"
+      :deleting-id="deletingId"
+      @edit="openEditDialog"
+      @remove="handleRuleRemove"
+      @show-logs="openLogDialog"
+      @update-status="handleRuleStatusUpdate"
+      @page-change="changePage"
+    />
 
-      <p class="table-note">
-        多个规则同时命中时，系统会按既定匹配顺序采用其中一条规则。
-      </p>
-    </el-card>
+    <RuleFixedRules />
 
-    <el-card
-      class="fixed-rule-card"
-      shadow="never"
-    >
-      <div class="fixed-rule-heading">
-        <div>
-          <strong>
-            固定审核规则
-          </strong>
-          <span>
-            由系统规则引擎执行，当前不可在此页修改
-          </span>
-        </div>
-        <el-button link>
-          查看规则说明
-        </el-button>
-      </div>
-      <div class="fixed-rule-grid">
-        <div>
-          <span>
-            商品单价
-          </span>
-          <p>
-            小于 500 元为材料；500 至小于 1000 元需支付凭证；1000 元及以上为资产。
-          </p>
-        </div>
-        <div>
-          <span>
-            自然周累计
-          </span>
-          <p>
-            不超过 1000 元正常继续；超过 1000 元至 3000 元待补凭证；超过 3000 元不通过。
-          </p>
-        </div>
-        <div>
-          <span>
-            支付凭证
-          </span>
-          <p>
-            每个凭证组必须同时包含订单截图和支付记录，并由管理员人工核验。
-          </p>
-        </div>
-      </div>
-    </el-card>
+    <RuleEditDialog
+      v-model="editDialogVisible"
+      :mode="editMode"
+      :rule="selectedRule"
+      :submitting="submitting"
+      @submit="handleRuleSubmit"
+    />
+
+    <RuleTestDialog
+      v-model="testDialogVisible"
+      :loading="testLoading"
+      :error="testError"
+      :result="testResult"
+      @test="testMatch"
+    />
+
+    <RuleLogDialog
+      v-model="logDialogVisible"
+      :loading="logLoading"
+      :error="logError"
+      :logs="logs"
+    />
   </section>
 </template>
 
@@ -358,170 +309,12 @@ h1 {
   gap: 12px;
 }
 
-.summary-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
-  margin: 20px 0;
-}
-
-.summary-card {
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-  padding: 18px;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  background: #ffffff;
-}
-
-.summary-card span,
-.summary-card small {
-  color: #94a3b8;
-  font-size: 12px;
-}
-
-.summary-card strong {
-  font-size: 28px;
-}
-
-.summary-card.approved strong {
-  color: #16a34a;
-}
-
-.summary-card.uncertain strong {
-  color: #d97706;
-}
-
-.summary-card.rejected strong {
-  color: #dc2626;
-}
-
-.filter-card,
-.table-card,
-.fixed-rule-card {
-  margin-bottom: 20px;
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
-}
-
-.filter-heading,
-.table-heading,
-.fixed-rule-heading,
-.table-heading > div,
-.fixed-rule-heading > div {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.filter-grid {
-  display: grid;
-  grid-template-columns: minmax(240px, 2fr) repeat(2, minmax(150px, 1fr)) auto;
-  gap: 12px;
-  margin-top: 16px;
-}
-
-.table-heading {
-  margin-bottom: 16px;
-}
-
-.table-heading strong {
-  margin-right: 10px;
-}
-
-.table-heading span,
-.fixed-rule-heading span {
-  color: #94a3b8;
-  font-size: 12px;
-}
-
-.keyword {
-  display: inline-block;
-  padding: 3px 8px;
-  border-radius: 5px;
-  background: #f1f5f9;
-  color: #334155;
-  font-size: 13px;
-}
-
-.status-control {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  white-space: nowrap;
-}
-
-.status-text {
-  color: #94a3b8;
-  font-size: 13px;
-}
-
-.status-text::before {
-  content: '停用';
-}
-
-.status-text.is-active {
-  color: #2563eb;
-}
-
-.status-text.is-active::before {
-  content: '启用';
-}
-
-.table-note {
-  margin: 16px 0 0;
-  color: #64748b;
-  font-size: 12px;
-}
-
-.fixed-rule-heading {
-  margin-bottom: 18px;
-}
-
-.fixed-rule-heading strong {
-  margin-right: 10px;
-}
-
-.fixed-rule-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-}
-
-.fixed-rule-grid > div {
-  padding: 14px;
-  border-radius: 10px;
-  background: #f8fafc;
-}
-
-.fixed-rule-grid span {
-  color: #334155;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.fixed-rule-grid p {
-  margin: 8px 0 0;
-  color: #64748b;
-  font-size: 13px;
-  line-height: 1.65;
-}
-
-@media (max-width: 1000px) {
-  .summary-grid,
-  .fixed-rule-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .filter-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
+.load-error {
+  margin-top: 20px;
 }
 
 @media (max-width: 640px) {
-  .page-heading,
-  .fixed-rule-heading {
+  .page-heading {
     align-items: flex-start;
     flex-direction: column;
   }
@@ -532,12 +325,6 @@ h1 {
 
   .heading-actions .el-button {
     flex: 1;
-  }
-
-  .summary-grid,
-  .filter-grid,
-  .fixed-rule-grid {
-    grid-template-columns: 1fr;
   }
 }
 </style>

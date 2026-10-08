@@ -565,10 +565,11 @@ async function getCategoryRuleSummary() {
   const summary = await categoryRuleRepository.getSummary()
 
   return {
-    total: Number(summary.total || 0),
-    reimbursableCount: Number(summary.reimbursable_count || 0),
-    uncertainCount: Number(summary.uncertain_count || 0),
-    nonReimbursableCount: Number(summary.non_reimbursable_count || 0),
+    ruleTotal: Number(summary.rule_total || 0),
+    keywordTotal: Number(summary.keyword_total || 0),
+    reimbursableRuleCount: Number(summary.reimbursable_rule_count || 0),
+    uncertainRuleCount: Number(summary.uncertain_rule_count || 0),
+    nonReimbursableRuleCount: Number(summary.non_reimbursable_rule_count || 0),
   }
 }
 
