@@ -1,8 +1,12 @@
 <script setup lang="ts">
 import {
+  computed,
   reactive,
   watch,
 } from 'vue'
+import type {
+  CategoryRuleNameOption,
+} from '../../../apis/categoryRule'
 
 export interface RuleFormValue {
   id?: number
@@ -16,10 +20,13 @@ const props = defineProps<{
   mode: 'create' | 'edit'
   rule: RuleFormValue | null
   submitting: boolean
+  ruleNameOptions: CategoryRuleNameOption[]
+  ruleNameOptionsLoading: boolean
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [visible: boolean]
+  searchRuleNames: [keyword: string]
   submit: [value: RuleFormValue]
 }>()
 
@@ -27,6 +34,20 @@ const form = reactive<RuleFormValue>({
   ruleName: '',
   keyword: '',
   categoryResult: '可以',
+})
+
+const matchedRuleNameOption = computed(() => {
+  const ruleName = form.ruleName.trim()
+
+  if (!ruleName) {
+    return null
+  }
+
+  return props.ruleNameOptions.find((option) => option.ruleName === ruleName) || null
+})
+
+const isExistingRuleNameSelected = computed(() => {
+  return props.mode === 'create' && Boolean(matchedRuleNameOption.value)
 })
 
 function resetForm() {
@@ -49,6 +70,14 @@ function handleSubmit() {
   })
 }
 
+function syncCategoryResult() {
+  if (props.mode !== 'create' || !matchedRuleNameOption.value) {
+    return
+  }
+
+  form.categoryResult = matchedRuleNameOption.value.categoryResult
+}
+
 watch(
   () => [
     props.modelValue,
@@ -58,6 +87,14 @@ watch(
   {
     immediate: true,
   },
+)
+
+watch(
+  [
+    () => form.ruleName,
+    () => props.ruleNameOptions,
+  ],
+  syncCategoryResult,
 )
 </script>
 
@@ -70,10 +107,36 @@ watch(
   >
     <el-form label-position="top">
       <el-form-item label="规则名称">
-        <el-input
+        <el-select
           v-model="form.ruleName"
-          placeholder="例如：办公耗材"
-        />
+          filterable
+          allow-create
+          clearable
+          remote
+          reserve-keyword
+          :loading="ruleNameOptionsLoading"
+          placeholder="选择已有名称，或输入新名称"
+          @change="syncCategoryResult"
+          @remote-method="emit('searchRuleNames', $event)"
+        >
+          <el-option
+            v-for="option in ruleNameOptions"
+            :key="option.ruleName"
+            :label="option.ruleName"
+            :value="option.ruleName"
+          >
+            <div class="rule-name-option">
+              <span>{{ option.ruleName }}</span>
+              <small>{{ option.categoryResult }}</small>
+            </div>
+          </el-option>
+        </el-select>
+        <p
+          v-if="isExistingRuleNameSelected"
+          class="rule-name-hint"
+        >
+          已选规则的品类结论为“{{ matchedRuleNameOption?.categoryResult }}”，不可修改。
+        </p>
       </el-form-item>
       <el-form-item label="匹配关键词">
         <el-input
@@ -82,7 +145,10 @@ watch(
         />
       </el-form-item>
       <el-form-item label="品类结论">
-        <el-radio-group v-model="form.categoryResult">
+        <el-radio-group
+          v-model="form.categoryResult"
+          :disabled="isExistingRuleNameSelected"
+        >
           <el-radio value="可以">可以</el-radio>
           <el-radio value="存疑">存疑</el-radio>
           <el-radio value="不可以">不可以</el-radio>
@@ -107,3 +173,22 @@ watch(
     </template>
   </el-dialog>
 </template>
+
+<style scoped>
+.rule-name-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rule-name-option small {
+  color: #94a3b8;
+}
+
+.rule-name-hint {
+  margin: 6px 0 0;
+  color: #64748b;
+  font-size: 12px;
+}
+</style>

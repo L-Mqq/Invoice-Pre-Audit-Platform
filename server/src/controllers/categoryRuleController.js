@@ -26,6 +26,19 @@ async function getSummary(req, res, next) {
   }
 }
 
+async function listNameOptions(req, res, next) {
+  try {
+    const result = await categoryRuleService.listCategoryRuleNameOptions(req.query)
+
+    res.json({
+      success: true,
+      data: result,
+    })
+  } catch (error) {
+    next(error)
+  }
+}
+
 async function listLogs(req, res, next) {
   try {
     const result = await categoryRuleService.listCategoryRuleLogs(req.query)
@@ -135,6 +148,7 @@ module.exports = {
   updateStatus,
   remove,
   list,
+  listNameOptions,
   listLogs,
   getSummary,
 }

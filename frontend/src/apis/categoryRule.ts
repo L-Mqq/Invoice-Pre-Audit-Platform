@@ -45,6 +45,11 @@ export interface CategoryRuleSummary {
   nonReimbursableRuleCount: number
 }
 
+export interface CategoryRuleNameOption {
+  ruleName: string
+  categoryResult: CategoryResult
+}
+
 export interface CategoryRulePayload {
   ruleName: string
   keyword: string
@@ -143,6 +148,28 @@ export async function getCategoryRuleSummary(): Promise<CategoryRuleSummary> {
     return response.data.data
   } catch (error) {
     throw getErrorMessage(error, '获取规则统计失败')
+  }
+}
+
+// 获取可选规则名称
+export async function getCategoryRuleNameOptions(
+  keyword?: string,
+): Promise<CategoryRuleNameOption[]> {
+  try {
+    const response = await http.get<{
+      success: boolean
+      data: CategoryRuleNameOption[]
+    }>('/category-rules/names', {
+      params: keyword
+        ? {
+          keyword,
+        }
+        : undefined,
+    })
+
+    return response.data.data
+  } catch (error) {
+    throw getErrorMessage(error, '获取规则名称失败')
   }
 }
 

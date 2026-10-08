@@ -6,6 +6,7 @@ const router = express.Router()
 
 router.use(authMiddleware)
 router.get('/summary', controller.getSummary)
+router.get('/names', controller.listNameOptions)
 router.get('/logs', controller.listLogs)
 router.get('/', controller.list)
 router.post('/test-match', controller.testMatch)

@@ -28,6 +28,9 @@ import {
   useCategoryRuleList,
 } from './composables/useCategoryRuleList'
 import {
+  useCategoryRuleNameOptions,
+} from './composables/useCategoryRuleNameOptions'
+import {
   useCategoryRuleLogs,
 } from './composables/useCategoryRuleLogs'
 import {
@@ -53,6 +56,11 @@ const {
   searchRules,
   total,
 } = useCategoryRuleList()
+const {
+  loading: ruleNameOptionsLoading,
+  loadOptions: loadRuleNameOptions,
+  options: ruleNameOptions,
+} = useCategoryRuleNameOptions()
 const {
   loadError: summaryLoadError,
   loadSummary,
@@ -94,12 +102,14 @@ function openCreateDialog() {
   editMode.value = 'create'
   selectedRule.value = null
   editDialogVisible.value = true
+  void loadRuleNameOptions()
 }
 
 function openEditDialog(rule: CategoryRule) {
   editMode.value = 'edit'
   selectedRule.value = rule
   editDialogVisible.value = true
+  void loadRuleNameOptions()
 }
 
 async function handleRuleSubmit(value: RuleFormValue) {
@@ -165,6 +175,10 @@ async function handleSearch(filters: RuleFilters) {
 
 async function handleResetFilters() {
   await resetFilters()
+}
+
+function handleRuleNameSearch(keyword: string) {
+  void loadRuleNameOptions(keyword)
 }
 
 onMounted(refreshRuleData)
@@ -249,6 +263,9 @@ onMounted(refreshRuleData)
       :mode="editMode"
       :rule="selectedRule"
       :submitting="submitting"
+      :rule-name-options="ruleNameOptions"
+      :rule-name-options-loading="ruleNameOptionsLoading"
+      @search-rule-names="handleRuleNameSearch"
       @submit="handleRuleSubmit"
     />
 

@@ -251,6 +251,10 @@ function findDuplicateKeyword(keyword, rules) {
   }) || null
 }
 
+function findRuleByName(ruleName, rules) {
+  return rules.find((rule) => rule.ruleName === ruleName) || null
+}
+
 function mapRule(row) {
   return {
     id: row.id,
@@ -290,6 +294,18 @@ async function listCategoryRules(query = {}) {
   }
 }
 
+async function listCategoryRuleNameOptions(query = {}) {
+  const keyword = normalizeKeyword(query.keyword)
+  const rows = await categoryRuleRepository.findRuleNameOptions({
+    keyword,
+  })
+
+  return rows.map((row) => ({
+    ruleName: row.rule_name,
+    categoryResult: row.category_result,
+  }))
+}
+
 async function createCategoryRule({
   input,
   operatorId,
@@ -314,6 +330,14 @@ async function createCategoryRule({
     if (duplicateRule) {
       throw conflict(
         `关键词“${keyword}”与规则“${duplicateRule.ruleName}”（关键词：${duplicateRule.keyword}）重复`,
+      )
+    }
+
+    const ruleWithSameName = findRuleByName(ruleName, rules)
+
+    if (ruleWithSameName && ruleWithSameName.categoryResult !== categoryResult) {
+      throw conflict(
+        `规则名称“${ruleName}”已配置为“${ruleWithSameName.categoryResult}”，不能设置为“${categoryResult}”`,
       )
     }
 
@@ -391,6 +415,14 @@ async function updateCategoryRule({
     if (duplicateRule) {
       throw conflict(
         `关键词“${keyword}”与规则“${duplicateRule.ruleName}”（关键词：${duplicateRule.keyword}）重复`,
+      )
+    }
+
+    const ruleWithSameName = findRuleByName(ruleName, otherRules)
+
+    if (ruleWithSameName && ruleWithSameName.categoryResult !== categoryResult) {
+      throw conflict(
+        `规则名称“${ruleName}”已配置为“${ruleWithSameName.categoryResult}”，不能设置为“${categoryResult}”`,
       )
     }
 
@@ -658,6 +690,7 @@ module.exports = {
   testCategoryRuleMatch,
   deleteCategoryRule,
   listCategoryRules,
+  listCategoryRuleNameOptions,
   listCategoryRuleLogs,
   getCategoryRuleSummary,
 }
