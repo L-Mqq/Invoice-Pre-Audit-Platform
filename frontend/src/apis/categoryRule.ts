@@ -5,6 +5,7 @@ export type CategoryResult = '可以' | '存疑' | '不可以'
 export type CategoryRuleOperation =
   | 'create_category_rule'
   | 'update_category_rule'
+  | 'update_category_rule_group'
   | 'update_category_rule_status'
   | 'delete_category_rule'
 

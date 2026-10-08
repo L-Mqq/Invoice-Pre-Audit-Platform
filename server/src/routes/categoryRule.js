@@ -12,6 +12,7 @@ router.get('/', controller.list)
 router.post('/test-match', controller.testMatch)
 router.post('/', controller.create)
 router.patch('/:ruleId/status', controller.updateStatus)
+router.patch('/:ruleId/group', controller.updateGroup)
 router.patch('/:ruleId', controller.update)
 router.delete('/:ruleId', controller.remove)
 

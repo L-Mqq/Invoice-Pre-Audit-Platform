@@ -345,6 +345,28 @@ async function findByIdForUpdate({
   return rows[0] || null
 }
 
+async function findByRuleName({
+  connection = pool,
+  ruleName,
+}) {
+  const [rows] = await connection.execute(
+    `SELECT id,
+            rule_name,
+            keyword,
+            category_result,
+            is_active,
+            created_by,
+            created_at,
+            updated_at
+       FROM category_rules
+      WHERE rule_name = ?
+      ORDER BY priority ASC, id ASC`,
+    [ruleName],
+  )
+
+  return rows
+}
+
 async function findOtherRulesForUpdate({
   connection = pool,
   ruleId,
@@ -408,6 +430,41 @@ async function updateCategoryRule({
   )
 }
 
+async function updateCategoryRuleGroup({
+  connection = pool,
+  currentRuleName,
+  ruleName,
+  categoryResult,
+}) {
+  await connection.execute(
+    `UPDATE category_rules
+        SET rule_name = ?,
+            category_result = ?
+      WHERE rule_name = ?`,
+    [
+      ruleName,
+      categoryResult,
+      currentRuleName,
+    ],
+  )
+}
+
+async function updateCategoryRuleKeyword({
+  connection = pool,
+  ruleId,
+  keyword,
+}) {
+  await connection.execute(
+    `UPDATE category_rules
+        SET keyword = ?
+      WHERE id = ?`,
+    [
+      keyword,
+      ruleId,
+    ],
+  )
+}
+
 async function updateCategoryRuleStatus({
   connection = pool,
   ruleId,
@@ -432,6 +489,23 @@ async function deleteCategoryRule({
     `DELETE FROM category_rules
       WHERE id = ?`,
     [ruleId],
+  )
+}
+
+async function deleteCategoryRules({
+  connection = pool,
+  ruleIds,
+}) {
+  if (ruleIds.length === 0) {
+    return
+  }
+
+  const placeholders = ruleIds.map(() => '?').join(', ')
+
+  await connection.execute(
+    `DELETE FROM category_rules
+      WHERE id IN (${placeholders})`,
+    ruleIds,
   )
 }
 
@@ -512,14 +586,18 @@ module.exports = {
   findLogPage,
   findById,
   findByIdForUpdate,
+  findByRuleName,
   findOtherRulesForUpdate,
   findOtherActiveRulesForUpdate,
   findRuleNameOptions,
   getSummary,
   createCategoryRule,
   updateCategoryRule,
+  updateCategoryRuleGroup,
+  updateCategoryRuleKeyword,
   updateCategoryRuleStatus,
   deleteCategoryRule,
+  deleteCategoryRules,
   createOperationLog,
   updateItemCategory,
 }

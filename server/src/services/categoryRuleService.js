@@ -9,6 +9,7 @@ const {
 const CATEGORY_RULE_LOG_OPERATIONS = new Set([
   'create_category_rule',
   'update_category_rule',
+  'update_category_rule_group',
   'update_category_rule_status',
   'delete_category_rule',
 ])
@@ -255,6 +256,38 @@ function findRuleByName(ruleName, rules) {
   return rules.find((rule) => rule.ruleName === ruleName) || null
 }
 
+function normalizeKeywords(value) {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw badRequest('关键词至少保留一个')
+  }
+
+  const keywords = value.map((keyword) => normalizeRequiredText(keyword, '关键词'))
+  const keywordKeys = new Set()
+
+  keywords.forEach((keyword) => {
+    const keywordKey = normalizeRuleKeyword(keyword)
+
+    if (keywordKeys.has(keywordKey)) {
+      throw badRequest(`关键词“${keyword}”重复`)
+    }
+
+    keywordKeys.add(keywordKey)
+  })
+
+  return keywords
+}
+
+function createRuleGroupSnapshot(rules) {
+  const firstRule = rules[0]
+
+  return {
+    ruleName: firstRule.ruleName,
+    categoryResult: firstRule.categoryResult,
+    isActive: Boolean(firstRule.isActive),
+    keywords: rules.map((rule) => rule.keyword),
+  }
+}
+
 function mapRule(row) {
   return {
     id: row.id,
@@ -451,6 +484,147 @@ async function updateCategoryRule({
     await connection.commit()
 
     return mapRule(updatedRule)
+  } catch (error) {
+    await connection.rollback()
+    throw error
+  } finally {
+    connection.release()
+  }
+}
+
+async function updateCategoryRuleGroup({
+  ruleId: rawRuleId,
+  input,
+  operatorId,
+  ipAddress,
+  userAgent,
+}) {
+  const ruleId = parseRuleId(rawRuleId)
+  const source = input && typeof input === 'object' ? input : {}
+
+  assertStatusIsNotUpdated(source)
+
+  const ruleName = normalizeRequiredText(source.ruleName, '规则名称')
+  const categoryResult = normalizeRequiredCategoryResult(source.categoryResult)
+  const keywords = normalizeKeywords(source.keywords)
+  const connection = await pool.getConnection()
+
+  try {
+    await connection.beginTransaction()
+
+    const rules = await categoryRuleRepository.findRulesForUpdate({
+      connection,
+    })
+    const currentRule = rules.find((rule) => rule.id === ruleId)
+
+    if (!currentRule) {
+      const error = new Error('规则不存在')
+      error.statusCode = 404
+      error.expose = true
+      throw error
+    }
+
+    const currentGroupRules = rules.filter((rule) => {
+      return rule.ruleName === currentRule.ruleName
+    })
+    const otherRules = rules.filter((rule) => {
+      return rule.ruleName !== currentRule.ruleName
+    })
+    const ruleWithSameName = findRuleByName(ruleName, otherRules)
+
+    if (ruleWithSameName) {
+      throw conflict(`规则名称“${ruleName}”已存在，不能直接合并规则组`)
+    }
+
+    keywords.forEach((keyword) => {
+      const duplicateRule = findDuplicateKeyword(keyword, otherRules)
+
+      if (duplicateRule) {
+        throw conflict(
+          `关键词“${keyword}”与规则“${duplicateRule.ruleName}”（关键词：${duplicateRule.keyword}）重复`,
+        )
+      }
+    })
+
+    const beforeData = createRuleGroupSnapshot(currentGroupRules)
+    const existingRulesByKeyword = new Map(
+      currentGroupRules.map((rule) => [
+        normalizeRuleKeyword(rule.keyword),
+        rule,
+      ]),
+    )
+    const requestedKeywordKeys = new Set(
+      keywords.map((keyword) => normalizeRuleKeyword(keyword)),
+    )
+
+    await categoryRuleRepository.updateCategoryRuleGroup({
+      connection,
+      currentRuleName: currentRule.ruleName,
+      ruleName,
+      categoryResult,
+    })
+
+    for (const keyword of keywords) {
+      const existingRule = existingRulesByKeyword.get(normalizeRuleKeyword(keyword))
+
+      if (existingRule) {
+        if (existingRule.keyword !== keyword) {
+          await categoryRuleRepository.updateCategoryRuleKeyword({
+            connection,
+            ruleId: existingRule.id,
+            keyword,
+          })
+        }
+
+        continue
+      }
+
+      await categoryRuleRepository.createCategoryRule({
+        connection,
+        ruleName,
+        keyword,
+        categoryResult,
+        isActive: Boolean(currentRule.isActive),
+        createdBy: operatorId,
+      })
+    }
+
+    const removedRuleIds = currentGroupRules
+      .filter((rule) => !requestedKeywordKeys.has(normalizeRuleKeyword(rule.keyword)))
+      .map((rule) => rule.id)
+
+    await categoryRuleRepository.deleteCategoryRules({
+      connection,
+      ruleIds: removedRuleIds,
+    })
+
+    const updatedRules = await categoryRuleRepository.findByRuleName({
+      connection,
+      ruleName,
+    })
+    const afterData = {
+      ruleName,
+      categoryResult,
+      isActive: Boolean(currentRule.isActive),
+      keywords: updatedRules.map((rule) => rule.keyword),
+    }
+
+    await categoryRuleRepository.createOperationLog({
+      connection,
+      operatorId,
+      ruleId: updatedRules[0].id,
+      operationType: 'update_category_rule_group',
+      beforeData,
+      afterData,
+      ipAddress,
+      userAgent,
+    })
+    await connection.commit()
+
+    return {
+      id: updatedRules[0].id,
+      ...afterData,
+    }
   } catch (error) {
     await connection.rollback()
     throw error
@@ -686,6 +860,7 @@ async function testCategoryRuleMatch({
 module.exports = {
   createCategoryRule,
   updateCategoryRule,
+  updateCategoryRuleGroup,
   updateCategoryRuleStatus,
   testCategoryRuleMatch,
   deleteCategoryRule,
