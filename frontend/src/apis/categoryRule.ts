@@ -7,6 +7,7 @@ export type CategoryRuleOperation =
   | 'update_category_rule'
   | 'update_category_rule_group'
   | 'update_category_rule_status'
+  | 'update_category_rule_group_status'
   | 'delete_category_rule'
   | 'delete_category_rule_group'
 
@@ -80,6 +81,13 @@ export interface CategoryRuleGroupDeleteResult {
   ruleName: string
   deletedRuleIds: number[]
   deletedKeywords: string[]
+}
+
+export interface CategoryRuleGroupStatusResult {
+  id: number
+  ruleName: string
+  isActive: boolean
+  updatedKeywordCount: number
 }
 
 export interface CategoryRuleTestResult {
@@ -261,6 +269,25 @@ export async function updateCategoryRuleStatus(
     return response.data.data
   } catch (error) {
     throw getErrorMessage(error, '更新规则状态失败')
+  }
+}
+
+// 同步更新同一规则名称下全部关键词的启用状态。
+export async function updateCategoryRuleGroupStatus(
+  ruleId: number,
+  isActive: boolean,
+): Promise<CategoryRuleGroupStatusResult> {
+  try {
+    const response = await http.patch<{
+      success: boolean
+      data: CategoryRuleGroupStatusResult
+    }>(`/category-rules/${ruleId}/group/status`, {
+      isActive,
+    })
+
+    return response.data.data
+  } catch (error) {
+    throw getErrorMessage(error, '更新规则组状态失败')
   }
 }
 

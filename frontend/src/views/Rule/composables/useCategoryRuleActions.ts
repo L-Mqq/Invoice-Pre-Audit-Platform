@@ -7,10 +7,12 @@ import {
   deleteCategoryRuleGroup,
   updateCategoryRule,
   updateCategoryRuleGroup,
+  updateCategoryRuleGroupStatus,
   updateCategoryRuleStatus,
   type CategoryRuleGroup,
   type CategoryRuleGroupDeleteResult,
   type CategoryRuleGroupPayload,
+  type CategoryRuleGroupStatusResult,
   type CategoryRule,
   type CategoryRulePayload,
   type CreateCategoryRulePayload,
@@ -87,6 +89,21 @@ export function useCategoryRuleActions() {
     }
   }
 
+  async function updateGroupStatus(
+    ruleId: number,
+    isActive: boolean,
+  ): Promise<CategoryRuleGroupStatusResult> {
+    updatingStatusId.value = ruleId
+
+    try {
+      return await updateCategoryRuleGroupStatus(ruleId, isActive)
+    } catch (error) {
+      throw new Error(getErrorMessage(error))
+    } finally {
+      updatingStatusId.value = null
+    }
+  }
+
   async function removeRule(ruleId: number): Promise<void> {
     deletingId.value = ruleId
 
@@ -121,6 +138,7 @@ export function useCategoryRuleActions() {
     submitting,
     updateRule,
     updateRuleGroup,
+    updateGroupStatus,
     updatingGroupId,
     updateStatus,
     updatingStatusId,

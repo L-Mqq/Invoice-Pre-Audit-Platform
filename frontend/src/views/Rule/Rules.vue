@@ -71,8 +71,8 @@ const {
   deletingId,
   removeRuleGroup,
   submitting,
+  updateGroupStatus,
   updateRuleGroup,
-  updateStatus,
   updatingStatusId,
 } = useCategoryRuleActions()
 const {
@@ -157,8 +157,8 @@ async function handleRuleSubmit(value: RuleFormValue) {
 
 async function handleRuleStatusUpdate(group: RuleGroup, isActive: boolean) {
   try {
-    await updateStatus(group.id, isActive)
-    ElMessage.success(isActive ? '规则已启用' : '规则已停用')
+    await updateGroupStatus(group.id, isActive)
+    ElMessage.success(isActive ? '规则组已启用' : '规则组已停用')
     await loadRules()
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '更新规则状态失败')
