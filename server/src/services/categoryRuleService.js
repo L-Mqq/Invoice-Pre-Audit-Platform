@@ -11,6 +11,7 @@ const CATEGORY_RULE_LOG_OPERATIONS = new Set([
   'update_category_rule',
   'update_category_rule_group',
   'update_category_rule_status',
+  'update_category_rule_group_status',
   'delete_category_rule',
   'delete_category_rule_group',
 ])
@@ -710,6 +711,109 @@ async function updateCategoryRuleStatus({
   }
 }
 
+// 修改规则组状态
+async function updateCategoryRuleGroupStatus({
+  ruleId: rawRuleId,
+  isActive: rawIsActive,
+  operatorId,
+  ipAddress,
+  userAgent,
+}) {
+  const ruleId = parseRuleId(rawRuleId)
+  const isActive = normalizeRequiredIsActive(rawIsActive)
+  const connection = await pool.getConnection()
+
+  try {
+    await connection.beginTransaction()
+
+    const currentRule = await categoryRuleRepository.findByIdForUpdate({
+      connection,
+      ruleId,
+    })
+
+    if (!currentRule) {
+      const error = new Error('规则不存在')
+      error.statusCode = 404
+      error.expose = true
+      throw error
+    }
+
+    const groupRules = await categoryRuleRepository.findByRuleNameForUpdate({
+      connection,
+      ruleName: currentRule.rule_name,
+    })
+    const rulesToUpdate = groupRules.filter((rule) => {
+      return Boolean(rule.is_active) !== isActive
+    })
+
+    if (rulesToUpdate.length === 0) {
+      await connection.commit()
+
+      return {
+        id: currentRule.id,
+        ruleName: currentRule.rule_name,
+        isActive,
+        updatedKeywordCount: 0,
+      }
+    }
+
+    if (isActive) {
+      const activeRules = await categoryRuleRepository.findActiveRulesOutsideGroupForUpdate({
+        connection,
+        ruleName: currentRule.rule_name,
+      })
+
+      rulesToUpdate.forEach((rule) => {
+        const duplicateRule = findDuplicateKeyword(rule.keyword, activeRules)
+
+        if (duplicateRule) {
+          throw conflict(
+            `关键词“${rule.keyword}”与启用规则“${duplicateRule.ruleName}”（关键词：${duplicateRule.keyword}）重复，无法启用`,
+          )
+        }
+      })
+    }
+
+    const beforeData = createRuleGroupSnapshot(groupRules)
+    const updatedRuleIds = rulesToUpdate.map((rule) => rule.id)
+
+    await categoryRuleRepository.updateCategoryRuleGroupStatus({
+      connection,
+      ruleName: currentRule.rule_name,
+      isActive,
+    })
+
+    await categoryRuleRepository.createOperationLog({
+      connection,
+      operatorId,
+      ruleId,
+      operationType: 'update_category_rule_group_status',
+      beforeData,
+      afterData: {
+        ...beforeData,
+        isActive,
+        updatedRuleIds,
+        updatedKeywordCount: updatedRuleIds.length,
+      },
+      ipAddress,
+      userAgent,
+    })
+    await connection.commit()
+
+    return {
+      id: currentRule.id,
+      ruleName: currentRule.rule_name,
+      isActive,
+      updatedKeywordCount: updatedRuleIds.length,
+    }
+  } catch (error) {
+    await connection.rollback()
+    throw error
+  } finally {
+    connection.release()
+  }
+}
+
 async function deleteCategoryRule({
   ruleId: rawRuleId,
   operatorId,
@@ -932,6 +1036,7 @@ module.exports = {
   updateCategoryRule,
   updateCategoryRuleGroup,
   updateCategoryRuleStatus,
+  updateCategoryRuleGroupStatus,
   testCategoryRuleMatch,
   deleteCategoryRule,
   deleteCategoryRuleGroup,
