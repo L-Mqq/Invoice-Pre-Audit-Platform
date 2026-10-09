@@ -2,19 +2,20 @@ import {
   ref,
 } from 'vue'
 import {
-  createCategoryRule,
+  createCategoryRuleGroup,
   deleteCategoryRule,
   deleteCategoryRuleGroup,
   updateCategoryRule,
   updateCategoryRuleGroup,
   updateCategoryRuleGroupStatus,
   type CategoryRuleGroup,
+  type CreateCategoryRuleGroupPayload,
+  type CreateCategoryRuleGroupResult,
   type CategoryRuleGroupDeleteResult,
   type CategoryRuleGroupPayload,
   type CategoryRuleGroupStatusResult,
   type CategoryRule,
   type CategoryRulePayload,
-  type CreateCategoryRulePayload,
 } from '../../../apis/categoryRule'
 
 function getErrorMessage(error: unknown): string {
@@ -28,12 +29,12 @@ export function useCategoryRuleActions() {
   const deletingId = ref<number | null>(null)
 
   async function createRule(
-    payload: CreateCategoryRulePayload,
-  ): Promise<CategoryRule> {
+    payload: CreateCategoryRuleGroupPayload,
+  ): Promise<CreateCategoryRuleGroupResult> {
     submitting.value = true
 
     try {
-      return await createCategoryRule(payload)
+      return await createCategoryRuleGroup(payload)
     } catch (error) {
       throw new Error(getErrorMessage(error))
     } finally {

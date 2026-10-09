@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import {
-  computed,
   reactive,
   ref,
   watch,
@@ -23,12 +22,10 @@ const props = defineProps<{
   rule: RuleFormValue | null
   submitting: boolean
   ruleNameOptions: CategoryRuleNameOption[]
-  ruleNameOptionsLoading: boolean
 }>()
 
 const emit = defineEmits<{
   'update:modelValue': [visible: boolean]
-  searchRuleNames: [keyword: string]
   submit: [value: RuleFormValue]
   removeLastKeyword: [value: RuleFormValue]
 }>()
@@ -44,27 +41,13 @@ const keywordError = ref('')
 const isRenaming = ref(false)
 const renameError = ref('')
 
-const matchedRuleNameOption = computed(() => {
-  const ruleName = form.ruleName.trim()
-
-  if (!ruleName) {
-    return null
-  }
-
-  return props.ruleNameOptions.find((option) => option.ruleName === ruleName) || null
-})
-
-const isExistingRuleNameSelected = computed(() => {
-  return props.mode === 'create' && Boolean(matchedRuleNameOption.value)
-})
-
 function resetForm() {
   form.id = props.rule?.id
   form.ruleName = props.rule?.ruleName || ''
   form.categoryResult = props.rule?.categoryResult || '可以'
   form.keywords = props.rule?.keywords.length
     ? [...props.rule.keywords]
-    : ['']
+    : []
   keywordInput.value = ''
   keywordError.value = ''
   isRenaming.value = false
@@ -130,6 +113,17 @@ function validateRuleName() {
     return null
   }
 
+  if (props.mode === 'create') {
+    const duplicateRuleName = props.ruleNameOptions.find((option) => {
+      return normalizeRuleNameKey(option.ruleName) === normalizeRuleNameKey(ruleName)
+    })
+
+    if (duplicateRuleName) {
+      renameError.value = '该规则名称已存在，请通过编辑规则组补充关键词'
+      return null
+    }
+  }
+
   if (props.mode === 'edit' && isRenaming.value) {
     const originalRuleName = normalizeRuleNameKey(props.rule?.ruleName || '')
     const nextRuleName = normalizeRuleNameKey(ruleName)
@@ -183,25 +177,23 @@ function addKeyword() {
 
 function removeKeyword(index: number) {
   if (form.keywords.length === 1) {
-    emit('removeLastKeyword', {
-      id: form.id,
-      ruleName: form.ruleName,
-      categoryResult: form.categoryResult,
-      keywords: [...form.keywords],
-    })
+    if (props.mode === 'edit') {
+      emit('removeLastKeyword', {
+        id: form.id,
+        ruleName: form.ruleName,
+        categoryResult: form.categoryResult,
+        keywords: [...form.keywords],
+      })
+      return
+    }
+
+    form.keywords.splice(index, 1)
+    keywordError.value = ''
     return
   }
 
   form.keywords.splice(index, 1)
   keywordError.value = ''
-}
-
-function syncCategoryResult() {
-  if (props.mode !== 'create' || !matchedRuleNameOption.value) {
-    return
-  }
-
-  form.categoryResult = matchedRuleNameOption.value.categoryResult
 }
 
 watch(
@@ -213,14 +205,6 @@ watch(
   {
     immediate: true,
   },
-)
-
-watch(
-  [
-    () => form.ruleName,
-    () => props.ruleNameOptions,
-  ],
-  syncCategoryResult,
 )
 
 watch(
@@ -242,31 +226,12 @@ watch(
   >
     <el-form label-position="top">
       <el-form-item label="规则名称">
-        <el-select
+        <el-input
           v-if="mode === 'create'"
           v-model="form.ruleName"
-          filterable
-          allow-create
           clearable
-          remote
-          reserve-keyword
-          :loading="ruleNameOptionsLoading"
-          placeholder="选择已有名称，或输入新名称"
-          @change="syncCategoryResult"
-          @remote-method="emit('searchRuleNames', $event)"
-        >
-          <el-option
-            v-for="option in ruleNameOptions"
-            :key="option.ruleName"
-            :label="option.ruleName"
-            :value="option.ruleName"
-          >
-            <div class="rule-name-option">
-              <span>{{ option.ruleName }}</span>
-              <small>{{ option.categoryResult }}</small>
-            </div>
-          </el-option>
-        </el-select>
+          placeholder="请输入新的规则名称"
+        />
         <div
           v-else
           class="rule-name-edit-row"
@@ -289,12 +254,6 @@ watch(
           </el-button>
         </div>
         <p
-          v-if="isExistingRuleNameSelected"
-          class="rule-name-hint"
-        >
-          已选规则的品类结论为“{{ matchedRuleNameOption?.categoryResult }}”，不可修改。
-        </p>
-        <p
           v-if="mode === 'edit' && isRenaming"
           class="rule-name-hint"
         >
@@ -307,19 +266,7 @@ watch(
           {{ renameError }}
         </p>
       </el-form-item>
-      <el-form-item
-        v-if="mode === 'create'"
-        label="匹配关键词"
-      >
-        <el-input
-          v-model="form.keywords[0]"
-          placeholder="例如：A4打印纸"
-        />
-      </el-form-item>
-      <el-form-item
-        v-else
-        label="匹配关键词"
-      >
+      <el-form-item label="匹配关键词">
         <div class="keyword-editor">
           <div class="keyword-tags">
             <el-tag
@@ -341,7 +288,10 @@ watch(
               添加
             </el-button>
           </div>
-          <p class="keyword-hint">
+          <p
+            v-if="mode === 'edit'"
+            class="keyword-hint"
+          >
             删除最后一个关键词将删除整个规则组。
           </p>
           <p
@@ -355,7 +305,6 @@ watch(
       <el-form-item label="品类结论">
         <el-radio-group
           v-model="form.categoryResult"
-          :disabled="isExistingRuleNameSelected"
         >
           <el-radio value="可以">可以</el-radio>
           <el-radio value="存疑">存疑</el-radio>
@@ -386,17 +335,6 @@ watch(
 </template>
 
 <style scoped>
-.rule-name-option {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.rule-name-option small {
-  color: #94a3b8;
-}
-
 .rule-name-hint {
   margin: 6px 0 0;
   color: #64748b;

@@ -57,7 +57,6 @@ const {
   total,
 } = useCategoryRuleList()
 const {
-  loading: ruleNameOptionsLoading,
   loadOptions: loadRuleNameOptions,
   options: ruleNameOptions,
 } = useCategoryRuleNameOptions()
@@ -126,20 +125,18 @@ function openEditDialog(group: RuleGroup) {
 async function handleRuleSubmit(value: RuleFormValue) {
   try {
     if (editMode.value === 'create') {
-      const keyword = value.keywords[0]?.trim()
-
-      if (!keyword) {
+      if (value.keywords.length === 0) {
         ElMessage.error('请填写匹配关键词')
         return
       }
 
       await createRule({
         ruleName: value.ruleName,
-        keyword,
         categoryResult: value.categoryResult,
+        keywords: value.keywords,
         isActive: true,
       })
-      ElMessage.success('规则新增成功')
+      ElMessage.success('规则组新增成功')
     } else if (value.id) {
       await updateRuleGroup(value.id, {
         ruleName: value.ruleName,
@@ -239,10 +236,6 @@ async function handleResetFilters() {
   await resetFilters()
 }
 
-function handleRuleNameSearch(keyword: string) {
-  void loadRuleNameOptions(keyword)
-}
-
 onMounted(refreshRuleData)
 </script>
 
@@ -326,8 +319,6 @@ onMounted(refreshRuleData)
       :rule="selectedRule"
       :submitting="submitting"
       :rule-name-options="ruleNameOptions"
-      :rule-name-options-loading="ruleNameOptionsLoading"
-      @search-rule-names="handleRuleNameSearch"
       @remove-last-keyword="handleLastKeywordRemove"
       @submit="handleRuleSubmit"
     />

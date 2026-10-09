@@ -52,9 +52,9 @@ async function listLogs(req, res, next) {
   }
 }
 
-async function create(req, res, next) {
+async function createGroup(req, res, next) {
   try {
-    const result = await categoryRuleService.createCategoryRule({
+    const result = await categoryRuleService.createCategoryRuleGroup({
       input: req.body,
       operatorId: req.user.id,
       ipAddress: req.ip,
@@ -179,7 +179,7 @@ async function removeGroup(req, res, next) {
 }
 
 module.exports = {
-  create,
+  createGroup,
   testMatch,
   update,
   updateGroup,

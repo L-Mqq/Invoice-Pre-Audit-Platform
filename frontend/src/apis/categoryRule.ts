@@ -4,6 +4,7 @@ import http from '../utils/http'
 export type CategoryResult = '可以' | '存疑' | '不可以'
 export type CategoryRuleOperation =
   | 'create_category_rule'
+  | 'create_category_rule_group'
   | 'update_category_rule'
   | 'update_category_rule_group'
   | 'update_category_rule_status'
@@ -59,14 +60,14 @@ export interface CategoryRulePayload {
   categoryResult: CategoryResult
 }
 
-export interface CreateCategoryRulePayload extends CategoryRulePayload {
-  isActive?: boolean
-}
-
 export interface CategoryRuleGroupPayload {
   ruleName: string
   categoryResult: CategoryResult
   keywords: string[]
+}
+
+export interface CreateCategoryRuleGroupPayload extends CategoryRuleGroupPayload {
+  isActive?: boolean
 }
 
 export interface CategoryRuleGroup {
@@ -75,6 +76,10 @@ export interface CategoryRuleGroup {
   categoryResult: CategoryResult
   isActive: boolean
   keywords: string[]
+}
+
+export interface CreateCategoryRuleGroupResult extends CategoryRuleGroup {
+  createdRuleIds: number[]
 }
 
 export interface CategoryRuleGroupDeleteResult {
@@ -203,19 +208,19 @@ export async function getCategoryRuleNameOptions(
   }
 }
 
-// 新增规则
-export async function createCategoryRule(
-  payload: CreateCategoryRulePayload,
-): Promise<CategoryRule> {
+// 新增规则组
+export async function createCategoryRuleGroup(
+  payload: CreateCategoryRuleGroupPayload,
+): Promise<CreateCategoryRuleGroupResult> {
   try {
     const response = await http.post<{
       success: boolean
-      data: CategoryRule
-    }>('/category-rules', payload)
+      data: CreateCategoryRuleGroupResult
+    }>('/category-rules/group', payload)
 
     return response.data.data
   } catch (error) {
-    throw getErrorMessage(error, '新增规则失败')
+    throw getErrorMessage(error, '新增规则组失败')
   }
 }
 

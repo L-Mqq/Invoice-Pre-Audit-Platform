@@ -21,6 +21,7 @@ function handleClose() {
 function getOperationLabel(operation: CategoryRuleLogItem['operationType']) {
   const labels: Record<CategoryRuleLogItem['operationType'], string> = {
     create_category_rule: '新增规则',
+    create_category_rule_group: '新增规则组',
     update_category_rule: '编辑规则',
     update_category_rule_group: '编辑规则组',
     update_category_rule_status: '状态切换',

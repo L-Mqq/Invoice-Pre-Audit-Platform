@@ -8,6 +8,7 @@ const {
 
 const CATEGORY_RULE_LOG_OPERATIONS = new Set([
   'create_category_rule',
+  'create_category_rule_group',
   'update_category_rule',
   'update_category_rule_group',
   'update_category_rule_status',
@@ -362,7 +363,7 @@ async function listCategoryRuleNameOptions(query = {}) {
   }))
 }
 
-async function createCategoryRule({
+async function createCategoryRuleGroup({
   input,
   operatorId,
   ipAddress,
@@ -370,9 +371,9 @@ async function createCategoryRule({
 }) {
   const source = input && typeof input === 'object' ? input : {}
   const ruleName = normalizeRuleName(source.ruleName)
-  const keyword = normalizeRequiredText(source.keyword, '关键词')
   const categoryResult = normalizeRequiredCategoryResult(source.categoryResult)
   const isActive = normalizeCreateIsActive(source.isActive)
+  const keywords = normalizeKeywords(source.keywords)
   const connection = await pool.getConnection()
 
   try {
@@ -381,47 +382,60 @@ async function createCategoryRule({
     const rules = await categoryRuleRepository.findRulesForUpdate({
       connection,
     })
-    const duplicateRule = findDuplicateKeyword(keyword, rules)
-
-    if (duplicateRule) {
-      throw conflict(
-        `关键词“${keyword}”与规则“${duplicateRule.ruleName}”（关键词：${duplicateRule.keyword}）重复`,
-      )
-    }
-
     const ruleWithSameName = findRuleByName(ruleName, rules)
 
-    if (ruleWithSameName && ruleWithSameName.categoryResult !== categoryResult) {
+    if (ruleWithSameName) {
       throw conflict(
-        `规则名称“${ruleName}”已配置为“${ruleWithSameName.categoryResult}”，不能设置为“${categoryResult}”`,
+        `规则名称“${ruleName}”已存在，请使用规则组编辑功能补充关键词`,
       )
     }
 
-    const ruleId = await categoryRuleRepository.createCategoryRule({
-      connection,
+    keywords.forEach((keyword) => {
+      const duplicateRule = findDuplicateKeyword(keyword, rules)
+
+      if (duplicateRule) {
+        throw conflict(
+          `关键词“${keyword}”与规则“${duplicateRule.ruleName}”（关键词：${duplicateRule.keyword}）重复`,
+        )
+      }
+    })
+
+    const createdRuleIds = []
+
+    for (const keyword of keywords) {
+      const ruleId = await categoryRuleRepository.createCategoryRule({
+        connection,
+        ruleName,
+        keyword,
+        categoryResult,
+        isActive,
+        createdBy: operatorId,
+      })
+
+      createdRuleIds.push(ruleId)
+    }
+
+    const createdRuleGroup = {
+      id: createdRuleIds[0],
       ruleName,
-      keyword,
       categoryResult,
       isActive,
-      createdBy: operatorId,
-    })
-    const createdRule = await categoryRuleRepository.findById({
-      connection,
-      ruleId,
-    })
+      keywords,
+      createdRuleIds,
+    }
 
     await categoryRuleRepository.createOperationLog({
       connection,
       operatorId,
-      ruleId,
-      operationType: 'create_category_rule',
-      afterData: mapRule(createdRule),
+      ruleId: createdRuleIds[0],
+      operationType: 'create_category_rule_group',
+      afterData: createdRuleGroup,
       ipAddress,
       userAgent,
     })
     await connection.commit()
 
-    return mapRule(createdRule)
+    return createdRuleGroup
   } catch (error) {
     await connection.rollback()
     throw error
@@ -977,7 +991,7 @@ async function testCategoryRuleMatch({
 }
 
 module.exports = {
-  createCategoryRule,
+  createCategoryRuleGroup,
   updateCategoryRule,
   updateCategoryRuleGroup,
   updateCategoryRuleGroupStatus,
