@@ -123,25 +123,6 @@ async function updateGroup(req, res, next) {
   }
 }
 
-async function updateStatus(req, res, next) {
-  try {
-    const result = await categoryRuleService.updateCategoryRuleStatus({
-      ruleId: req.params.ruleId,
-      isActive: req.body?.isActive,
-      operatorId: req.user.id,
-      ipAddress: req.ip,
-      userAgent: req.get('User-Agent'),
-    })
-
-    res.json({
-      success: true,
-      data: result,
-    })
-  } catch (error) {
-    next(error)
-  }
-}
-
 async function updateGroupStatus(req, res, next) {
   try {
     const result = await categoryRuleService.updateCategoryRuleGroupStatus({
@@ -202,7 +183,6 @@ module.exports = {
   testMatch,
   update,
   updateGroup,
-  updateStatus,
   updateGroupStatus,
   remove,
   removeGroup,

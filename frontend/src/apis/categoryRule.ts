@@ -253,25 +253,6 @@ export async function updateCategoryRuleGroup(
   }
 }
 
-// 更新规则状态
-export async function updateCategoryRuleStatus(
-  ruleId: number,
-  isActive: boolean,
-): Promise<CategoryRule> {
-  try {
-    const response = await http.patch<{
-      success: boolean
-      data: CategoryRule
-    }>(`/category-rules/${ruleId}/status`, {
-      isActive,
-    })
-
-    return response.data.data
-  } catch (error) {
-    throw getErrorMessage(error, '更新规则状态失败')
-  }
-}
-
 // 同步更新同一规则名称下全部关键词的启用状态。
 export async function updateCategoryRuleGroupStatus(
   ruleId: number,

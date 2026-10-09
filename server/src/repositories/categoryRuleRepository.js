@@ -509,22 +509,6 @@ async function updateCategoryRuleKeyword({
   )
 }
 
-async function updateCategoryRuleStatus({
-  connection = pool,
-  ruleId,
-  isActive,
-}) {
-  await connection.execute(
-    `UPDATE category_rules
-        SET is_active = ?
-      WHERE id = ?`,
-    [
-      isActive,
-      ruleId,
-    ],
-  )
-}
-
 async function updateCategoryRuleGroupStatus({
   connection = pool,
   ruleName,
@@ -668,7 +652,6 @@ module.exports = {
   updateCategoryRule,
   updateCategoryRuleGroup,
   updateCategoryRuleKeyword,
-  updateCategoryRuleStatus,
   updateCategoryRuleGroupStatus,
   deleteCategoryRule,
   deleteCategoryRules,

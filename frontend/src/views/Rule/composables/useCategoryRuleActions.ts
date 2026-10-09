@@ -8,7 +8,6 @@ import {
   updateCategoryRule,
   updateCategoryRuleGroup,
   updateCategoryRuleGroupStatus,
-  updateCategoryRuleStatus,
   type CategoryRuleGroup,
   type CategoryRuleGroupDeleteResult,
   type CategoryRuleGroupPayload,
@@ -74,21 +73,6 @@ export function useCategoryRuleActions() {
     }
   }
 
-  async function updateStatus(
-    ruleId: number,
-    isActive: boolean,
-  ): Promise<CategoryRule> {
-    updatingStatusId.value = ruleId
-
-    try {
-      return await updateCategoryRuleStatus(ruleId, isActive)
-    } catch (error) {
-      throw new Error(getErrorMessage(error))
-    } finally {
-      updatingStatusId.value = null
-    }
-  }
-
   async function updateGroupStatus(
     ruleId: number,
     isActive: boolean,
@@ -140,7 +124,6 @@ export function useCategoryRuleActions() {
     updateRuleGroup,
     updateGroupStatus,
     updatingGroupId,
-    updateStatus,
     updatingStatusId,
   }
 }
