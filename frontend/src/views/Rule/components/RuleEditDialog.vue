@@ -30,6 +30,7 @@ const emit = defineEmits<{
   'update:modelValue': [visible: boolean]
   searchRuleNames: [keyword: string]
   submit: [value: RuleFormValue]
+  removeLastKeyword: [value: RuleFormValue]
 }>()
 
 const form = reactive<RuleFormValue>({
@@ -182,7 +183,12 @@ function addKeyword() {
 
 function removeKeyword(index: number) {
   if (form.keywords.length === 1) {
-    keywordError.value = '规则组至少保留一个关键词，暂不支持删除整条规则'
+    emit('removeLastKeyword', {
+      id: form.id,
+      ruleName: form.ruleName,
+      categoryResult: form.categoryResult,
+      keywords: [...form.keywords],
+    })
     return
   }
 
@@ -319,7 +325,7 @@ watch(
             <el-tag
               v-for="(keyword, index) in form.keywords"
               :key="keyword"
-              :closable="form.keywords.length > 1"
+              closable
               @close="removeKeyword(index)"
             >
               {{ keyword }}
@@ -336,7 +342,7 @@ watch(
             </el-button>
           </div>
           <p class="keyword-hint">
-            关键词至少保留一个；删除最后一个关键词需等待规则组删除功能支持。
+            删除最后一个关键词将删除整个规则组。
           </p>
           <p
             v-if="keywordError"

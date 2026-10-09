@@ -198,6 +198,39 @@ async function handleRuleRemove(group: RuleGroup) {
   }
 }
 
+async function handleLastKeywordRemove(value: RuleFormValue) {
+  if (!value.id) {
+    return
+  }
+
+  try {
+    const ruleName = selectedRule.value?.ruleName || value.ruleName
+    const keyword = value.keywords[0] || '当前关键词'
+
+    await ElMessageBox.confirm(
+      `确定删除“${ruleName}”规则组？当前编辑中仅剩关键词“${keyword}”。继续操作将永久删除整个规则组及全部已保存关键词，无法恢复。`,
+      '删除规则组',
+      {
+        confirmButtonText: '删除规则组',
+        cancelButtonText: '取消',
+        type: 'warning',
+      },
+    )
+    await removeRuleGroup(value.id)
+    editDialogVisible.value = false
+    ElMessage.success('规则组已删除')
+    await refreshRuleData()
+
+    if (rules.value.length === 0 && page.value > 1 && total.value > 0) {
+      await changePage(page.value - 1)
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message !== 'cancel') {
+      ElMessage.error(error.message)
+    }
+  }
+}
+
 async function handleSearch(filters: RuleFilters) {
   await searchRules(filters)
 }
@@ -295,6 +328,7 @@ onMounted(refreshRuleData)
       :rule-name-options="ruleNameOptions"
       :rule-name-options-loading="ruleNameOptionsLoading"
       @search-rule-names="handleRuleNameSearch"
+      @remove-last-keyword="handleLastKeywordRemove"
       @submit="handleRuleSubmit"
     />
 
