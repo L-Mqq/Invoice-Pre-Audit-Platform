@@ -14,6 +14,7 @@ export interface RuleFormValue {
   ruleName: string
   categoryResult: '可以' | '存疑' | '不可以'
   keywords: string[]
+  renamed?: boolean
 }
 
 const props = defineProps<{
@@ -39,6 +40,8 @@ const form = reactive<RuleFormValue>({
 
 const keywordInput = ref('')
 const keywordError = ref('')
+const isRenaming = ref(false)
+const renameError = ref('')
 
 const matchedRuleNameOption = computed(() => {
   const ruleName = form.ruleName.trim()
@@ -63,6 +66,8 @@ function resetForm() {
     : ['']
   keywordInput.value = ''
   keywordError.value = ''
+  isRenaming.value = false
+  renameError.value = ''
 }
 
 function handleClose() {
@@ -70,6 +75,12 @@ function handleClose() {
 }
 
 function handleSubmit() {
+  const ruleName = validateRuleName()
+
+  if (!ruleName) {
+    return
+  }
+
   const keywords = form.keywords
     .map((keyword) => keyword.trim())
     .filter(Boolean)
@@ -81,10 +92,70 @@ function handleSubmit() {
 
   emit('submit', {
     id: form.id,
-    ruleName: form.ruleName.trim(),
+    ruleName,
     categoryResult: form.categoryResult,
     keywords,
+    renamed: props.mode === 'edit'
+      && normalizeRuleName(ruleName) !== normalizeRuleName(props.rule?.ruleName || ''),
   })
+}
+
+function normalizeRuleName(value: string) {
+  return value.trim().replace(/[\s　]+/g, ' ')
+}
+
+function normalizeRuleNameKey(value: string) {
+  return normalizeRuleName(value).toLowerCase()
+}
+
+function validateRuleName() {
+  const rawRuleName = form.ruleName
+  const ruleName = normalizeRuleName(rawRuleName)
+
+  renameError.value = ''
+
+  if (!ruleName) {
+    renameError.value = '规则名称不能为空'
+    return null
+  }
+
+  if (/[\u0000-\u001F\u007F]/.test(rawRuleName)) {
+    renameError.value = '规则名称不能包含换行或控制字符'
+    return null
+  }
+
+  if ([...ruleName].length > 128) {
+    renameError.value = '规则名称不能超过 128 个字符'
+    return null
+  }
+
+  if (props.mode === 'edit' && isRenaming.value) {
+    const originalRuleName = normalizeRuleNameKey(props.rule?.ruleName || '')
+    const nextRuleName = normalizeRuleNameKey(ruleName)
+    const conflictOption = props.ruleNameOptions.find((option) => {
+      const optionName = normalizeRuleNameKey(option.ruleName)
+
+      return optionName === nextRuleName && optionName !== originalRuleName
+    })
+
+    if (conflictOption) {
+      renameError.value = '该规则名称已存在，不能合并规则组'
+      return null
+    }
+  }
+
+  return ruleName
+}
+
+function enableRename() {
+  isRenaming.value = true
+  renameError.value = ''
+}
+
+function cancelRename() {
+  form.ruleName = props.rule?.ruleName || ''
+  isRenaming.value = false
+  renameError.value = ''
 }
 
 function normalizeKeyword(keyword: string) {
@@ -145,6 +216,15 @@ watch(
   ],
   syncCategoryResult,
 )
+
+watch(
+  () => form.ruleName,
+  () => {
+    if (isRenaming.value) {
+      renameError.value = ''
+    }
+  },
+)
 </script>
 
 <template>
@@ -181,16 +261,44 @@ watch(
             </div>
           </el-option>
         </el-select>
-        <el-input
+        <div
           v-else
-          :model-value="form.ruleName"
-          readonly
-        />
+          class="rule-name-edit-row"
+        >
+          <el-input
+            v-model="form.ruleName"
+            :readonly="!isRenaming"
+          />
+          <el-button
+            v-if="!isRenaming"
+            @click="enableRename"
+          >
+            重命名
+          </el-button>
+          <el-button
+            v-else
+            @click="cancelRename"
+          >
+            取消重命名
+          </el-button>
+        </div>
         <p
           v-if="isExistingRuleNameSelected"
           class="rule-name-hint"
         >
           已选规则的品类结论为“{{ matchedRuleNameOption?.categoryResult }}”，不可修改。
+        </p>
+        <p
+          v-if="mode === 'edit' && isRenaming"
+          class="rule-name-hint"
+        >
+          重命名将同步修改该规则组下全部关键词。
+        </p>
+        <p
+          v-if="renameError"
+          class="rename-error"
+        >
+          {{ renameError }}
         </p>
       </el-form-item>
       <el-form-item
@@ -286,6 +394,22 @@ watch(
 .rule-name-hint {
   margin: 6px 0 0;
   color: #64748b;
+  font-size: 12px;
+}
+
+.rule-name-edit-row {
+  display: flex;
+  width: 100%;
+  gap: 8px;
+}
+
+.rule-name-edit-row .el-input {
+  flex: 1;
+}
+
+.rename-error {
+  margin: 6px 0 0;
+  color: #dc2626;
   font-size: 12px;
 }
 

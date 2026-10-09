@@ -120,6 +120,7 @@ function openEditDialog(group: RuleGroup) {
     keywords: [...group.keywords],
   }
   editDialogVisible.value = true
+  void loadRuleNameOptions()
 }
 
 async function handleRuleSubmit(value: RuleFormValue) {
@@ -145,7 +146,7 @@ async function handleRuleSubmit(value: RuleFormValue) {
         categoryResult: value.categoryResult,
         keywords: value.keywords,
       })
-      ElMessage.success('规则组编辑成功')
+      ElMessage.success(value.renamed ? '规则组已重命名' : '规则组编辑成功')
     }
 
     editDialogVisible.value = false

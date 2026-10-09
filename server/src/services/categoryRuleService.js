@@ -188,6 +188,23 @@ function normalizeRequiredText(value, fieldName) {
   return normalizedValue
 }
 
+function normalizeRuleName(value) {
+  const ruleName = normalizeRequiredText(value, '规则名称')
+
+  if (/[\u0000-\u001F\u007F]/.test(ruleName)) {
+    throw badRequest('规则名称不能包含控制字符')
+  }
+
+  return ruleName.replace(/[\s　]+/g, ' ')
+}
+
+function normalizeRuleNameKey(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[\s　]+/g, ' ')
+}
+
 function normalizeItemName(value) {
   if (typeof value !== 'string') {
     throw badRequest('商品名称不能为空')
@@ -255,7 +272,11 @@ function findDuplicateKeyword(keyword, rules) {
 }
 
 function findRuleByName(ruleName, rules) {
-  return rules.find((rule) => rule.ruleName === ruleName) || null
+  const normalizedRuleName = normalizeRuleNameKey(ruleName)
+
+  return rules.find((rule) => {
+    return normalizeRuleNameKey(rule.ruleName) === normalizedRuleName
+  }) || null
 }
 
 function normalizeKeywords(value) {
@@ -348,7 +369,7 @@ async function createCategoryRule({
   userAgent,
 }) {
   const source = input && typeof input === 'object' ? input : {}
-  const ruleName = normalizeRequiredText(source.ruleName, '规则名称')
+  const ruleName = normalizeRuleName(source.ruleName)
   const keyword = normalizeRequiredText(source.keyword, '关键词')
   const categoryResult = normalizeRequiredCategoryResult(source.categoryResult)
   const isActive = normalizeCreateIsActive(source.isActive)
@@ -421,7 +442,7 @@ async function updateCategoryRule({
 
   assertStatusIsNotUpdated(source)
 
-  const ruleName = normalizeRequiredText(source.ruleName, '规则名称')
+  const ruleName = normalizeRuleName(source.ruleName)
   const keyword = normalizeRequiredText(source.keyword, '关键词')
   const categoryResult = normalizeRequiredCategoryResult(source.categoryResult)
   const connection = await pool.getConnection()
@@ -506,7 +527,7 @@ async function updateCategoryRuleGroup({
 
   assertStatusIsNotUpdated(source)
 
-  const ruleName = normalizeRequiredText(source.ruleName, '规则名称')
+  const ruleName = normalizeRuleName(source.ruleName)
   const categoryResult = normalizeRequiredCategoryResult(source.categoryResult)
   const keywords = normalizeKeywords(source.keywords)
   const connection = await pool.getConnection()
