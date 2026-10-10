@@ -361,18 +361,6 @@ async function listCategoryRules(query = {}) {
   }
 }
 
-async function listCategoryRuleNameOptions(query = {}) {
-  const keyword = normalizeKeyword(query.keyword)
-  const rows = await categoryRuleRepository.findRuleNameOptions({
-    keyword,
-  })
-
-  return rows.map((row) => ({
-    ruleName: row.rule_name,
-    categoryResult: row.category_result,
-  }))
-}
-
 async function checkCategoryRuleName(query = {}) {
   const ruleName = normalizeRuleName(query.ruleName)
   const excludeRuleId = parseOptionalPositiveInteger(
@@ -900,7 +888,6 @@ module.exports = {
   deleteCategoryRuleGroup,
   listCategoryRules,
   checkCategoryRuleName,
-  listCategoryRuleNameOptions,
   listCategoryRuleLogs,
   getCategoryRuleSummary,
 }

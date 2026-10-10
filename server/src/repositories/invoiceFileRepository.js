@@ -13,15 +13,6 @@ async function createFile({ connection = pool, batchId, invoiceId, originalName,
 
 module.exports = { createFile }
 
-// 按照批次查询文件
-async function findByBatchId(batchId) {
-  const [rows] = await pool.execute(
-    'SELECT id, batch_id, invoice_id, original_name, storage_key, mime_type, file_size, sha256, extraction_status, extraction_error, created_at, updated_at FROM invoice_files WHERE batch_id = ? ORDER BY id',
-    [batchId],
-  )
-  return rows
-}
-
 // 新增批次文件与发票关联查询；
 async function findDetailsByBatchId(batchId) {
   const [rows] = await pool.execute(
@@ -85,7 +76,6 @@ async function updateExtractionStatus({ connection = pool, id, status, error = n
 
 module.exports = {
   createFile,
-  findByBatchId,
   findDetailsByBatchId,
   findById,
   findByInvoiceId,

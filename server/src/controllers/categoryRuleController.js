@@ -26,19 +26,6 @@ async function getSummary(req, res, next) {
   }
 }
 
-async function listNameOptions(req, res, next) {
-  try {
-    const result = await categoryRuleService.listCategoryRuleNameOptions(req.query)
-
-    res.json({
-      success: true,
-      data: result,
-    })
-  } catch (error) {
-    next(error)
-  }
-}
-
 async function checkName(req, res, next) {
   try {
     const result = await categoryRuleService.checkCategoryRuleName(req.query)
@@ -162,7 +149,6 @@ module.exports = {
   removeGroup,
   list,
   checkName,
-  listNameOptions,
   listLogs,
   getSummary,
 }

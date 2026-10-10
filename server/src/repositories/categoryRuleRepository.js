@@ -225,29 +225,6 @@ async function getSummary() {
   return rows[0]
 }
 
-async function findRuleNameOptions({
-  keyword,
-}) {
-  const whereSql = keyword
-    ? 'WHERE rule_name LIKE ?'
-    : ''
-  const parameters = keyword
-    ? [`%${keyword}%`]
-    : []
-  const [rows] = await pool.execute(
-    `SELECT rule_name,
-            MIN(category_result) AS category_result
-       FROM category_rules
-       ${whereSql}
-      GROUP BY rule_name
-      ORDER BY rule_name ASC
-      LIMIT 100`,
-    parameters,
-  )
-
-  return rows
-}
-
 async function findRulesForUpdate({
   connection = pool,
 }) {
@@ -379,27 +356,6 @@ async function findByRuleNameForUpdate({
       ORDER BY priority ASC, id ASC
       FOR UPDATE`,
     [ruleName],
-  )
-
-  return rows
-}
-
-async function findOtherActiveRulesForUpdate({
-  connection = pool,
-  ruleId,
-}) {
-  const [rows] = await connection.execute(
-    `SELECT id,
-            rule_name AS ruleName,
-            keyword,
-            category_result AS categoryResult,
-            is_active AS isActive
-       FROM category_rules
-      WHERE id <> ?
-        AND is_active = TRUE
-      ORDER BY id ASC
-      FOR UPDATE`,
-    [ruleId],
   )
 
   return rows
@@ -584,9 +540,7 @@ module.exports = {
   findByIdForUpdate,
   findByRuleName,
   findByRuleNameForUpdate,
-  findOtherActiveRulesForUpdate,
   findActiveRulesOutsideGroupForUpdate,
-  findRuleNameOptions,
   getSummary,
   createCategoryRule,
   updateCategoryRuleGroup,

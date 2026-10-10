@@ -33,33 +33,6 @@ async function findPendingRequirementForWeek({
   return rows[0] || null
 }
 
-// 按任务主键查询任务；状态变更前可使用 FOR UPDATE 锁定任务。
-async function findRequirementById({
-  connection = pool,
-  requirementId,
-  forUpdate = false,
-}) {
-  const lockClause = forUpdate ? ' FOR UPDATE' : ''
-  const [rows] = await connection.execute(
-    `SELECT
-       id,
-       seller_tax_id,
-       cumulative_week_start,
-       trigger_invoice_id,
-       triggered_cumulative_amount,
-       status,
-       completed_at,
-       cancelled_at,
-       created_at,
-       updated_at
-     FROM weekly_voucher_requirements
-     WHERE id = ?${lockClause}`,
-    [requirementId],
-  )
-
-  return rows[0] || null
-}
-
 // 查询由指定触发发票创建的进行中任务。
 async function findPendingRequirementByTriggerInvoiceId({
   connection = pool,
@@ -412,7 +385,6 @@ module.exports = {
   findPendingRequirementForWeek,
   findPendingRequirementsByInvoiceId,
   findRequirementsByInvoiceId,
-  findRequirementById,
   findRequirementInvoices,
   getRequirementProgress,
   updateRequirementInvoiceVoucherStatus,
