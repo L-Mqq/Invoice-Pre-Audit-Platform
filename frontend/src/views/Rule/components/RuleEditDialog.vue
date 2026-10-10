@@ -33,7 +33,7 @@ const emit = defineEmits<{
 const form = reactive<RuleFormValue>({
   ruleName: '',
   categoryResult: '可以',
-  keywords: [''],
+  keywords: [],
 })
 
 const keywordInput = ref('')
@@ -59,6 +59,10 @@ function handleClose() {
 }
 
 function handleSubmit() {
+  if (!commitKeyword()) {
+    return
+  }
+
   const ruleName = validateRuleName()
 
   if (!ruleName) {
@@ -157,22 +161,26 @@ function normalizeKeyword(keyword: string) {
   return keyword.trim().toLowerCase().replace(/[\s　]+/g, '')
 }
 
-function addKeyword() {
+function commitKeyword() {
   const keyword = keywordInput.value.trim()
 
   if (!keyword) {
-    keywordError.value = '请输入关键词'
-    return
+    return true
   }
 
   if (form.keywords.some((item) => normalizeKeyword(item) === normalizeKeyword(keyword))) {
     keywordError.value = `关键词“${keyword}”重复`
-    return
+    return false
   }
 
   form.keywords.push(keyword)
   keywordInput.value = ''
   keywordError.value = ''
+  return true
+}
+
+function addKeyword() {
+  commitKeyword()
 }
 
 function removeKeyword(index: number) {
@@ -282,12 +290,15 @@ watch(
             <el-input
               v-model="keywordInput"
               placeholder="输入新关键词后添加"
-              @keyup.enter="addKeyword"
+              @keydown.enter.prevent="addKeyword"
             />
             <el-button @click="addKeyword">
               添加
             </el-button>
           </div>
+          <p class="keyword-hint">
+            输入后可按回车或点击添加；保存时会自动加入当前输入。
+          </p>
           <p
             v-if="mode === 'edit'"
             class="keyword-hint"
@@ -324,7 +335,10 @@ watch(
         :loading="submitting"
         :disabled="
           !form.ruleName.trim()
-          || !form.keywords.some((keyword) => keyword.trim())
+          || (
+            !form.keywords.some((keyword) => keyword.trim())
+            && !keywordInput.trim()
+          )
         "
         @click="handleSubmit"
       >
