@@ -16,10 +16,11 @@ import RuleFilterBar, {
 import RuleFixedRules from './components/RuleFixedRules.vue'
 import RuleLogDialog from './components/RuleLogDialog.vue'
 import RuleStatsCards from './components/RuleStatsCards.vue'
-import RuleTable, {
-  type RuleGroup,
-} from './components/RuleTable.vue'
+import RuleTable from './components/RuleTable.vue'
 import RuleTestDialog from './components/RuleTestDialog.vue'
+import type {
+  CategoryRuleGroup,
+} from '../../apis/categoryRule'
 import {
   useCategoryRuleActions,
 } from './composables/useCategoryRuleActions'
@@ -45,7 +46,6 @@ const selectedRule = ref<RuleFormValue | null>(null)
 
 const {
   changePage,
-  filters,
   loadError,
   loading: listLoading,
   loadRules,
@@ -105,12 +105,7 @@ function openCreateDialog() {
   void loadRuleNameOptions()
 }
 
-function openEditDialog(group: RuleGroup) {
-  if (filters.value.keyword || filters.value.isActive !== '') {
-    ElMessage.warning('请先清除关键词和启用状态筛选，再编辑规则组，以确保加载完整关键词')
-    return
-  }
-
+function openEditDialog(group: CategoryRuleGroup) {
   editMode.value = 'edit'
   selectedRule.value = {
     id: group.id,
@@ -153,7 +148,7 @@ async function handleRuleSubmit(value: RuleFormValue) {
   }
 }
 
-async function handleRuleStatusUpdate(group: RuleGroup, isActive: boolean) {
+async function handleRuleStatusUpdate(group: CategoryRuleGroup, isActive: boolean) {
   try {
     await updateGroupStatus(group.id, isActive)
     ElMessage.success(isActive ? '规则组已启用' : '规则组已停用')
@@ -163,14 +158,9 @@ async function handleRuleStatusUpdate(group: RuleGroup, isActive: boolean) {
   }
 }
 
-async function handleRuleRemove(group: RuleGroup) {
+async function handleRuleRemove(group: CategoryRuleGroup) {
   try {
-    const isKeywordSubsetDisplayed = Boolean(
-      filters.value.keyword || filters.value.isActive !== '',
-    )
-    const keywordDescription = isKeywordSubsetDisplayed
-      ? '将永久删除该组全部关键词，无法恢复。'
-      : `将永久删除 ${group.keywords.length} 个关键词（${group.keywords.join('、')}），无法恢复。`
+    const keywordDescription = `将永久删除 ${group.keywords.length} 个关键词（${group.keywords.join('、')}），无法恢复。`
 
     await ElMessageBox.confirm(
       `确定删除“${group.ruleName}”规则组？${keywordDescription}`,

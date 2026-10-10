@@ -4,7 +4,7 @@ import {
 import {
   getCategoryRules,
   type CategoryResult,
-  type CategoryRule,
+  type CategoryRuleGroup,
 } from '../../../apis/categoryRule'
 
 export interface CategoryRuleFilters {
@@ -18,7 +18,7 @@ function getErrorMessage(error: unknown): string {
 }
 
 export function useCategoryRuleList() {
-  const rules = ref<CategoryRule[]>([])
+  const rules = ref<CategoryRuleGroup[]>([])
   const loading = ref(false)
   const loadError = ref('')
   const page = ref(1)

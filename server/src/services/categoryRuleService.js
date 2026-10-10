@@ -325,6 +325,29 @@ function mapRule(row) {
   }
 }
 
+function mapRuleGroups(rows) {
+  const groups = new Map()
+
+  rows.forEach((row) => {
+    const existingGroup = groups.get(row.rule_name)
+
+    if (existingGroup) {
+      existingGroup.keywords.push(row.keyword)
+      return
+    }
+
+    groups.set(row.rule_name, {
+      id: row.id,
+      ruleName: row.rule_name,
+      categoryResult: row.category_result,
+      isActive: Boolean(row.is_active),
+      keywords: [row.keyword],
+    })
+  })
+
+  return Array.from(groups.values())
+}
+
 async function listCategoryRules(query = {}) {
   const page = parsePositiveInteger(query.page, 1)
   const pageSize = Math.min(parsePositiveInteger(query.pageSize, 20), 100)
@@ -341,7 +364,7 @@ async function listCategoryRules(query = {}) {
   })
 
   return {
-    items: result.rows.map(mapRule),
+    items: mapRuleGroups(result.rows),
     pagination: {
       page,
       pageSize,

@@ -1,23 +1,11 @@
 <script setup lang="ts">
-import {
-  computed,
-} from 'vue'
 import type {
   CategoryResult,
-  CategoryRule,
+  CategoryRuleGroup,
 } from '../../../apis/categoryRule'
 
-export interface RuleGroup {
-  id: number
-  ruleName: string
-  keywords: string[]
-  categoryResult: CategoryResult
-  isActive: boolean
-  hasMixedStatus: boolean
-}
-
 const props = defineProps<{
-  rules: CategoryRule[]
+  rules: CategoryRuleGroup[]
   loading: boolean
   page: number
   pageSize: number
@@ -27,14 +15,14 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  edit: [group: RuleGroup]
-  remove: [group: RuleGroup]
+  edit: [group: CategoryRuleGroup]
+  remove: [group: CategoryRuleGroup]
   showLogs: []
-  updateStatus: [group: RuleGroup, isActive: boolean]
+  updateStatus: [group: CategoryRuleGroup, isActive: boolean]
   pageChange: [page: number]
 }>()
 
-function getCategoryTagType(result: CategoryRule['categoryResult']) {
+function getCategoryTagType(result: CategoryResult) {
   if (result === '可以') {
     return 'success'
   }
@@ -46,32 +34,6 @@ function getCategoryTagType(result: CategoryRule['categoryResult']) {
   return 'warning'
 }
 
-const groupedRules = computed<RuleGroup[]>(() => {
-  const ruleGroups = new Map<string, RuleGroup>()
-
-  props.rules.forEach((rule) => {
-    const existingRule = ruleGroups.get(rule.ruleName)
-
-    if (!existingRule) {
-      ruleGroups.set(rule.ruleName, {
-        ...rule,
-        keywords: [rule.keyword],
-        hasMixedStatus: false,
-      })
-      return
-    }
-
-    if (!existingRule.keywords.includes(rule.keyword)) {
-      existingRule.keywords.push(rule.keyword)
-    }
-
-    if (existingRule.isActive !== rule.isActive) {
-      existingRule.hasMixedStatus = true
-    }
-  })
-
-  return Array.from(ruleGroups.values())
-})
 </script>
 
 <template>
@@ -94,7 +56,7 @@ const groupedRules = computed<RuleGroup[]>(() => {
 
     <el-table
       v-loading="loading"
-      :data="groupedRules"
+      :data="rules"
       row-key="id"
       stripe
     >

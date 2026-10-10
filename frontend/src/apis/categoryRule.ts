@@ -32,7 +32,7 @@ export interface CategoryRuleListQuery {
 }
 
 export interface CategoryRuleListResponse {
-  items: CategoryRule[]
+  items: CategoryRuleGroup[]
   pagination: {
     page: number
     pageSize: number

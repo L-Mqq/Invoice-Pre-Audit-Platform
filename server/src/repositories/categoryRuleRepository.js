@@ -124,9 +124,6 @@ async function findPage({
   }
 
   const ruleNamePlaceholders = ruleNames.map(() => '?').join(', ')
-  const selectedWhereSql = whereSql
-    ? `${whereSql} AND rule_name IN (${ruleNamePlaceholders})`
-    : `WHERE rule_name IN (${ruleNamePlaceholders})`
   const [rows] = await pool.execute(
     `SELECT id,
             rule_name,
@@ -137,12 +134,9 @@ async function findPage({
             created_at,
             updated_at
        FROM category_rules
-       ${selectedWhereSql}
+       WHERE rule_name IN (${ruleNamePlaceholders})
       ORDER BY priority ASC, id ASC`,
-    [
-      ...parameters,
-      ...ruleNames,
-    ],
+    ruleNames,
   )
 
   return {
