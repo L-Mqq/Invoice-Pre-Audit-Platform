@@ -43,6 +43,12 @@ export interface CategoryRuleNameOption {
   categoryResult: CategoryResult
 }
 
+export interface CategoryRuleNameCheckResult {
+  ruleName: string
+  exists: boolean
+  categoryResult: CategoryResult | null
+}
+
 export interface CategoryRuleGroupPayload {
   ruleName: string
   categoryResult: CategoryResult
@@ -188,6 +194,32 @@ export async function getCategoryRuleNameOptions(
     return response.data.data
   } catch (error) {
     throw getErrorMessage(error, '获取规则名称失败')
+  }
+}
+
+// 精确校验规则名称是否已被其他规则组使用
+export async function checkCategoryRuleName(
+  ruleName: string,
+  excludeRuleId?: number,
+): Promise<CategoryRuleNameCheckResult> {
+  try {
+    const response = await http.get<{
+      success: boolean
+      data: CategoryRuleNameCheckResult
+    }>('/category-rules/names/check', {
+      params: {
+        ruleName,
+        ...(excludeRuleId
+          ? {
+            excludeRuleId,
+          }
+          : {}),
+      },
+    })
+
+    return response.data.data
+  } catch (error) {
+    throw getErrorMessage(error, '校验规则名称失败')
   }
 }
 

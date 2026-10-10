@@ -373,6 +373,41 @@ async function listCategoryRuleNameOptions(query = {}) {
   }))
 }
 
+async function checkCategoryRuleName(query = {}) {
+  const ruleName = normalizeRuleName(query.ruleName)
+  const excludeRuleId = parseOptionalPositiveInteger(
+    query.excludeRuleId,
+    '排除规则 ID',
+  )
+  let currentRule = null
+
+  if (excludeRuleId) {
+    currentRule = await categoryRuleRepository.findById({
+      ruleId: excludeRuleId,
+    })
+
+    if (!currentRule) {
+      const error = new Error('规则不存在')
+      error.statusCode = 404
+      error.expose = true
+      throw error
+    }
+  }
+
+  const rulesWithSameName = await categoryRuleRepository.findByRuleName({
+    ruleName,
+  })
+  const isCurrentRuleGroup = currentRule
+    && normalizeRuleNameKey(currentRule.rule_name) === normalizeRuleNameKey(ruleName)
+  const existingRule = isCurrentRuleGroup ? null : rulesWithSameName[0] || null
+
+  return {
+    ruleName,
+    exists: Boolean(existingRule),
+    categoryResult: existingRule ? existingRule.category_result : null,
+  }
+}
+
 async function createCategoryRuleGroup({
   input,
   operatorId,
@@ -864,6 +899,7 @@ module.exports = {
   testCategoryRuleMatch,
   deleteCategoryRuleGroup,
   listCategoryRules,
+  checkCategoryRuleName,
   listCategoryRuleNameOptions,
   listCategoryRuleLogs,
   getCategoryRuleSummary,

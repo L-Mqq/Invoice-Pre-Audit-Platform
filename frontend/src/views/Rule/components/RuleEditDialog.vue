@@ -1,11 +1,15 @@
 <script setup lang="ts">
 import {
+  onBeforeUnmount,
   reactive,
   ref,
   watch,
 } from 'vue'
 import type {
-  CategoryRuleNameOption,
+  CategoryRuleNameCheckResult,
+} from '../../../apis/categoryRule'
+import {
+  checkCategoryRuleName,
 } from '../../../apis/categoryRule'
 
 export interface RuleFormValue {
@@ -21,7 +25,6 @@ const props = defineProps<{
   mode: 'create' | 'edit'
   rule: RuleFormValue | null
   submitting: boolean
-  ruleNameOptions: CategoryRuleNameOption[]
 }>()
 
 const emit = defineEmits<{
@@ -40,6 +43,9 @@ const keywordInput = ref('')
 const keywordError = ref('')
 const isRenaming = ref(false)
 const renameError = ref('')
+const nameConflict = ref(false)
+let nameCheckTimer: ReturnType<typeof setTimeout> | undefined
+let nameCheckRequestId = 0
 
 function resetForm() {
   form.id = props.rule?.id
@@ -52,13 +58,14 @@ function resetForm() {
   keywordError.value = ''
   isRenaming.value = false
   renameError.value = ''
+  resetNameCheck()
 }
 
 function handleClose() {
   emit('update:modelValue', false)
 }
 
-function handleSubmit() {
+async function handleSubmit() {
   if (!commitKeyword()) {
     return
   }
@@ -66,6 +73,12 @@ function handleSubmit() {
   const ruleName = validateRuleName()
 
   if (!ruleName) {
+    return
+  }
+
+  const nameCheckResult = await checkCurrentRuleName(ruleName)
+
+  if (!nameCheckResult || nameCheckResult.exists) {
     return
   }
 
@@ -117,44 +130,101 @@ function validateRuleName() {
     return null
   }
 
-  if (props.mode === 'create') {
-    const duplicateRuleName = props.ruleNameOptions.find((option) => {
-      return normalizeRuleNameKey(option.ruleName) === normalizeRuleNameKey(ruleName)
-    })
-
-    if (duplicateRuleName) {
-      renameError.value = '该规则名称已存在，请通过编辑规则组补充关键词'
-      return null
-    }
-  }
-
-  if (props.mode === 'edit' && isRenaming.value) {
-    const originalRuleName = normalizeRuleNameKey(props.rule?.ruleName || '')
-    const nextRuleName = normalizeRuleNameKey(ruleName)
-    const conflictOption = props.ruleNameOptions.find((option) => {
-      const optionName = normalizeRuleNameKey(option.ruleName)
-
-      return optionName === nextRuleName && optionName !== originalRuleName
-    })
-
-    if (conflictOption) {
-      renameError.value = '该规则名称已存在，不能合并规则组'
-      return null
-    }
-  }
-
   return ruleName
+}
+
+function shouldCheckRuleName() {
+  return props.mode === 'create' || isRenaming.value
+}
+
+function getExcludeRuleId() {
+  return props.mode === 'edit' ? form.id : undefined
+}
+
+function resetNameCheck() {
+  if (nameCheckTimer) {
+    clearTimeout(nameCheckTimer)
+    nameCheckTimer = undefined
+  }
+
+  nameCheckRequestId += 1
+  nameConflict.value = false
+}
+
+async function checkRuleName(
+  ruleName: string,
+): Promise<CategoryRuleNameCheckResult | null> {
+  const requestId = ++nameCheckRequestId
+
+  nameConflict.value = false
+
+  try {
+    const result = await checkCategoryRuleName(
+      ruleName,
+      getExcludeRuleId(),
+    )
+
+    if (requestId !== nameCheckRequestId) {
+      return null
+    }
+
+    nameConflict.value = result.exists
+
+    return result
+  } catch {
+    return null
+  }
+}
+
+async function checkCurrentRuleName(
+  ruleName: string,
+) {
+  if (!shouldCheckRuleName()) {
+    return {
+      ruleName,
+      exists: false,
+      categoryResult: null,
+    }
+  }
+
+  if (nameCheckTimer) {
+    clearTimeout(nameCheckTimer)
+    nameCheckTimer = undefined
+  }
+
+  return checkRuleName(ruleName)
+}
+
+function scheduleRuleNameCheck() {
+  resetNameCheck()
+
+  if (!props.modelValue || !shouldCheckRuleName()) {
+    return
+  }
+
+  const ruleName = normalizeRuleName(form.ruleName)
+
+  if (!ruleName) {
+    return
+  }
+
+  nameCheckTimer = setTimeout(() => {
+    nameCheckTimer = undefined
+    void checkRuleName(ruleName)
+  }, 300)
 }
 
 function enableRename() {
   isRenaming.value = true
   renameError.value = ''
+  scheduleRuleNameCheck()
 }
 
 function cancelRename() {
   form.ruleName = props.rule?.ruleName || ''
   isRenaming.value = false
   renameError.value = ''
+  resetNameCheck()
 }
 
 function normalizeKeyword(keyword: string) {
@@ -221,8 +291,14 @@ watch(
     if (isRenaming.value) {
       renameError.value = ''
     }
+
+    scheduleRuleNameCheck()
   },
 )
+
+onBeforeUnmount(() => {
+  resetNameCheck()
+})
 </script>
 
 <template>
@@ -272,6 +348,12 @@ watch(
           class="rename-error"
         >
           {{ renameError }}
+        </p>
+        <p
+          v-else-if="nameConflict"
+          class="rename-error"
+        >
+          该规则名称已存在，不能合并规则组
         </p>
       </el-form-item>
       <el-form-item label="匹配关键词">

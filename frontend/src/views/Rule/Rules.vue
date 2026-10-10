@@ -28,9 +28,6 @@ import {
   useCategoryRuleList,
 } from './composables/useCategoryRuleList'
 import {
-  useCategoryRuleNameOptions,
-} from './composables/useCategoryRuleNameOptions'
-import {
   useCategoryRuleLogs,
   type CategoryRuleLogFilters,
 } from './composables/useCategoryRuleLogs'
@@ -57,10 +54,6 @@ const {
   searchRules,
   total,
 } = useCategoryRuleList()
-const {
-  loadOptions: loadRuleNameOptions,
-  options: ruleNameOptions,
-} = useCategoryRuleNameOptions()
 const {
   loadError: summaryLoadError,
   loadSummary,
@@ -101,7 +94,6 @@ async function refreshRuleData() {
   await Promise.all([
     loadRules(),
     loadSummary(),
-    loadRuleNameOptions(),
   ])
 }
 
@@ -109,7 +101,6 @@ function openCreateDialog() {
   editMode.value = 'create'
   selectedRule.value = null
   editDialogVisible.value = true
-  void loadRuleNameOptions()
 }
 
 function openEditDialog(group: CategoryRuleGroup) {
@@ -121,7 +112,6 @@ function openEditDialog(group: CategoryRuleGroup) {
     keywords: [...group.keywords],
   }
   editDialogVisible.value = true
-  void loadRuleNameOptions()
 }
 
 async function handleRuleSubmit(value: RuleFormValue) {
@@ -323,7 +313,6 @@ onMounted(refreshRuleData)
       :mode="editMode"
       :rule="selectedRule"
       :submitting="submitting"
-      :rule-name-options="ruleNameOptions"
       @remove-last-keyword="handleLastKeywordRemove"
       @submit="handleRuleSubmit"
     />
