@@ -32,6 +32,7 @@ import {
 } from './composables/useCategoryRuleNameOptions'
 import {
   useCategoryRuleLogs,
+  type CategoryRuleLogFilters,
 } from './composables/useCategoryRuleLogs'
 import {
   useCategoryRuleSummary,
@@ -83,10 +84,16 @@ const {
   visible: testDialogVisible,
 } = useCategoryRuleTest()
 const {
+  changePage: changeLogPage,
   error: logError,
   loading: logLoading,
   logs,
   openLogDialog,
+  page: logPage,
+  pageSize: logPageSize,
+  resetLogFilters,
+  searchLogs,
+  total: logTotal,
   visible: logDialogVisible,
 } = useCategoryRuleLogs()
 
@@ -226,6 +233,14 @@ async function handleResetFilters() {
   await resetFilters()
 }
 
+async function handleLogSearch(filters: CategoryRuleLogFilters) {
+  await searchLogs(filters)
+}
+
+async function handleLogReset() {
+  await resetLogFilters()
+}
+
 onMounted(refreshRuleData)
 </script>
 
@@ -326,6 +341,12 @@ onMounted(refreshRuleData)
       :loading="logLoading"
       :error="logError"
       :logs="logs"
+      :page="logPage"
+      :page-size="logPageSize"
+      :total="logTotal"
+      @page-change="changeLogPage"
+      @reset="handleLogReset"
+      @search="handleLogSearch"
     />
   </section>
 </template>
