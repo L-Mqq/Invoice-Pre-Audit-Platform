@@ -12,17 +12,6 @@ export type CategoryRuleOperation =
   | 'delete_category_rule'
   | 'delete_category_rule_group'
 
-export interface CategoryRule {
-  id: number
-  ruleName: string
-  keyword: string
-  categoryResult: CategoryResult
-  isActive: boolean
-  createdBy: number | null
-  createdAt: string
-  updatedAt: string
-}
-
 export interface CategoryRuleListQuery {
   page: number
   pageSize: number
@@ -51,12 +40,6 @@ export interface CategoryRuleSummary {
 
 export interface CategoryRuleNameOption {
   ruleName: string
-  categoryResult: CategoryResult
-}
-
-export interface CategoryRulePayload {
-  ruleName: string
-  keyword: string
   categoryResult: CategoryResult
 }
 
@@ -224,23 +207,6 @@ export async function createCategoryRuleGroup(
   }
 }
 
-// 编辑规则
-export async function updateCategoryRule(
-  ruleId: number,
-  payload: CategoryRulePayload,
-): Promise<CategoryRule> {
-  try {
-    const response = await http.patch<{
-      success: boolean
-      data: CategoryRule
-    }>(`/category-rules/${ruleId}`, payload)
-
-    return response.data.data
-  } catch (error) {
-    throw getErrorMessage(error, '编辑规则失败')
-  }
-}
-
 // 编辑同一规则名称下的全部关键词。
 export async function updateCategoryRuleGroup(
   ruleId: number,
@@ -274,15 +240,6 @@ export async function updateCategoryRuleGroupStatus(
     return response.data.data
   } catch (error) {
     throw getErrorMessage(error, '更新规则组状态失败')
-  }
-}
-
-// 删除规则
-export async function deleteCategoryRule(ruleId: number): Promise<void> {
-  try {
-    await http.delete(`/category-rules/${ruleId}`)
-  } catch (error) {
-    throw getErrorMessage(error, '删除规则失败')
   }
 }
 

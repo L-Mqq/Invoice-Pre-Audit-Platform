@@ -13,8 +13,6 @@ router.post('/test-match', controller.testMatch)
 router.post('/group', controller.createGroup)
 router.patch('/:ruleId/group/status', controller.updateGroupStatus)
 router.patch('/:ruleId/group', controller.updateGroup)
-router.patch('/:ruleId', controller.update)
 router.delete('/:ruleId/group', controller.removeGroup)
-router.delete('/:ruleId', controller.remove)
 
 module.exports = router

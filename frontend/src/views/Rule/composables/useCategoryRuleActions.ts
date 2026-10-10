@@ -3,9 +3,7 @@ import {
 } from 'vue'
 import {
   createCategoryRuleGroup,
-  deleteCategoryRule,
   deleteCategoryRuleGroup,
-  updateCategoryRule,
   updateCategoryRuleGroup,
   updateCategoryRuleGroupStatus,
   type CategoryRuleGroup,
@@ -14,8 +12,6 @@ import {
   type CategoryRuleGroupDeleteResult,
   type CategoryRuleGroupPayload,
   type CategoryRuleGroupStatusResult,
-  type CategoryRule,
-  type CategoryRulePayload,
 } from '../../../apis/categoryRule'
 
 function getErrorMessage(error: unknown): string {
@@ -35,21 +31,6 @@ export function useCategoryRuleActions() {
 
     try {
       return await createCategoryRuleGroup(payload)
-    } catch (error) {
-      throw new Error(getErrorMessage(error))
-    } finally {
-      submitting.value = false
-    }
-  }
-
-  async function updateRule(
-    ruleId: number,
-    payload: CategoryRulePayload,
-  ): Promise<CategoryRule> {
-    submitting.value = true
-
-    try {
-      return await updateCategoryRule(ruleId, payload)
     } catch (error) {
       throw new Error(getErrorMessage(error))
     } finally {
@@ -89,18 +70,6 @@ export function useCategoryRuleActions() {
     }
   }
 
-  async function removeRule(ruleId: number): Promise<void> {
-    deletingId.value = ruleId
-
-    try {
-      await deleteCategoryRule(ruleId)
-    } catch (error) {
-      throw new Error(getErrorMessage(error))
-    } finally {
-      deletingId.value = null
-    }
-  }
-
   async function removeRuleGroup(
     ruleId: number,
   ): Promise<CategoryRuleGroupDeleteResult> {
@@ -118,10 +87,8 @@ export function useCategoryRuleActions() {
   return {
     createRule,
     deletingId,
-    removeRule,
     removeRuleGroup,
     submitting,
-    updateRule,
     updateRuleGroup,
     updateGroupStatus,
     updatingGroupId,

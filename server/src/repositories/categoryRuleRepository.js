@@ -384,26 +384,6 @@ async function findByRuleNameForUpdate({
   return rows
 }
 
-async function findOtherRulesForUpdate({
-  connection = pool,
-  ruleId,
-}) {
-  const [rows] = await connection.execute(
-    `SELECT id,
-            rule_name AS ruleName,
-            keyword,
-            category_result AS categoryResult,
-            is_active AS isActive
-       FROM category_rules
-      WHERE id <> ?
-      ORDER BY id ASC
-      FOR UPDATE`,
-    [ruleId],
-  )
-
-  return rows
-}
-
 async function findOtherActiveRulesForUpdate({
   connection = pool,
   ruleId,
@@ -444,28 +424,6 @@ async function findActiveRulesOutsideGroupForUpdate({
   )
 
   return rows
-}
-
-async function updateCategoryRule({
-  connection = pool,
-  ruleId,
-  ruleName,
-  keyword,
-  categoryResult,
-}) {
-  await connection.execute(
-    `UPDATE category_rules
-        SET rule_name = ?,
-            keyword = ?,
-            category_result = ?
-      WHERE id = ?`,
-    [
-      ruleName,
-      keyword,
-      categoryResult,
-      ruleId,
-    ],
-  )
 }
 
 async function updateCategoryRuleGroup({
@@ -516,17 +474,6 @@ async function updateCategoryRuleGroupStatus({
       isActive,
       ruleName,
     ],
-  )
-}
-
-async function deleteCategoryRule({
-  connection = pool,
-  ruleId,
-}) {
-  await connection.execute(
-    `DELETE FROM category_rules
-      WHERE id = ?`,
-    [ruleId],
   )
 }
 
@@ -637,17 +584,14 @@ module.exports = {
   findByIdForUpdate,
   findByRuleName,
   findByRuleNameForUpdate,
-  findOtherRulesForUpdate,
   findOtherActiveRulesForUpdate,
   findActiveRulesOutsideGroupForUpdate,
   findRuleNameOptions,
   getSummary,
   createCategoryRule,
-  updateCategoryRule,
   updateCategoryRuleGroup,
   updateCategoryRuleKeyword,
   updateCategoryRuleGroupStatus,
-  deleteCategoryRule,
   deleteCategoryRules,
   deleteCategoryRuleGroup,
   createOperationLog,

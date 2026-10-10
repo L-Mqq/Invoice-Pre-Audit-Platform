@@ -85,25 +85,6 @@ async function testMatch(req, res, next) {
   }
 }
 
-async function update(req, res, next) {
-  try {
-    const result = await categoryRuleService.updateCategoryRule({
-      ruleId: req.params.ruleId,
-      input: req.body,
-      operatorId: req.user.id,
-      ipAddress: req.ip,
-      userAgent: req.get('User-Agent'),
-    })
-
-    res.json({
-      success: true,
-      data: result,
-    })
-  } catch (error) {
-    next(error)
-  }
-}
-
 async function updateGroup(req, res, next) {
   try {
     const result = await categoryRuleService.updateCategoryRuleGroup({
@@ -142,24 +123,6 @@ async function updateGroupStatus(req, res, next) {
   }
 }
 
-async function remove(req, res, next) {
-  try {
-    const result = await categoryRuleService.deleteCategoryRule({
-      ruleId: req.params.ruleId,
-      operatorId: req.user.id,
-      ipAddress: req.ip,
-      userAgent: req.get('User-Agent'),
-    })
-
-    res.json({
-      success: true,
-      data: result,
-    })
-  } catch (error) {
-    next(error)
-  }
-}
-
 async function removeGroup(req, res, next) {
   try {
     const result = await categoryRuleService.deleteCategoryRuleGroup({
@@ -181,10 +144,8 @@ async function removeGroup(req, res, next) {
 module.exports = {
   createGroup,
   testMatch,
-  update,
   updateGroup,
   updateGroupStatus,
-  remove,
   removeGroup,
   list,
   listNameOptions,

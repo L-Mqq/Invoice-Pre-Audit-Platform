@@ -312,19 +312,6 @@ function createRuleGroupSnapshot(rules) {
   }
 }
 
-function mapRule(row) {
-  return {
-    id: row.id,
-    ruleName: row.rule_name,
-    keyword: row.keyword,
-    categoryResult: row.category_result,
-    isActive: Boolean(row.is_active),
-    createdBy: row.created_by,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at,
-  }
-}
-
 function mapRuleGroups(rows) {
   const groups = new Map()
 
@@ -459,91 +446,6 @@ async function createCategoryRuleGroup({
     await connection.commit()
 
     return createdRuleGroup
-  } catch (error) {
-    await connection.rollback()
-    throw error
-  } finally {
-    connection.release()
-  }
-}
-
-async function updateCategoryRule({
-  ruleId: rawRuleId,
-  input,
-  operatorId,
-  ipAddress,
-  userAgent,
-}) {
-  const ruleId = parseRuleId(rawRuleId)
-  const source = input && typeof input === 'object' ? input : {}
-
-  assertStatusIsNotUpdated(source)
-
-  const ruleName = normalizeRuleName(source.ruleName)
-  const keyword = normalizeRequiredText(source.keyword, '关键词')
-  const categoryResult = normalizeRequiredCategoryResult(source.categoryResult)
-  const connection = await pool.getConnection()
-
-  try {
-    await connection.beginTransaction()
-
-    const currentRule = await categoryRuleRepository.findByIdForUpdate({
-      connection,
-      ruleId,
-    })
-
-    if (!currentRule) {
-      const error = new Error('规则不存在')
-      error.statusCode = 404
-      error.expose = true
-      throw error
-    }
-
-    const otherRules = await categoryRuleRepository.findOtherRulesForUpdate({
-      connection,
-      ruleId,
-    })
-    const duplicateRule = findDuplicateKeyword(keyword, otherRules)
-
-    if (duplicateRule) {
-      throw conflict(
-        `关键词“${keyword}”与规则“${duplicateRule.ruleName}”（关键词：${duplicateRule.keyword}）重复`,
-      )
-    }
-
-    const ruleWithSameName = findRuleByName(ruleName, otherRules)
-
-    if (ruleWithSameName && ruleWithSameName.categoryResult !== categoryResult) {
-      throw conflict(
-        `规则名称“${ruleName}”已配置为“${ruleWithSameName.categoryResult}”，不能设置为“${categoryResult}”`,
-      )
-    }
-
-    await categoryRuleRepository.updateCategoryRule({
-      connection,
-      ruleId,
-      ruleName,
-      keyword,
-      categoryResult,
-    })
-    const updatedRule = await categoryRuleRepository.findById({
-      connection,
-      ruleId,
-    })
-
-    await categoryRuleRepository.createOperationLog({
-      connection,
-      operatorId,
-      ruleId,
-      operationType: 'update_category_rule',
-      beforeData: mapRule(currentRule),
-      afterData: mapRule(updatedRule),
-      ipAddress,
-      userAgent,
-    })
-    await connection.commit()
-
-    return mapRule(updatedRule)
   } catch (error) {
     await connection.rollback()
     throw error
@@ -796,64 +698,6 @@ async function updateCategoryRuleGroupStatus({
   }
 }
 
-async function deleteCategoryRule({
-  ruleId: rawRuleId,
-  operatorId,
-  ipAddress,
-  userAgent,
-}) {
-  const ruleId = parseRuleId(rawRuleId)
-  const connection = await pool.getConnection()
-
-  try {
-    await connection.beginTransaction()
-
-    const currentRule = await categoryRuleRepository.findByIdForUpdate({
-      connection,
-      ruleId,
-    })
-
-    if (!currentRule) {
-      const error = new Error('规则不存在')
-      error.statusCode = 404
-      error.expose = true
-      throw error
-    }
-
-    const deletedAt = new Date().toISOString()
-
-    await categoryRuleRepository.createOperationLog({
-      connection,
-      operatorId,
-      ruleId,
-      operationType: 'delete_category_rule',
-      beforeData: mapRule(currentRule),
-      afterData: {
-        ...mapRule(currentRule),
-        deleted: true,
-        deletedAt,
-        deletedBy: operatorId,
-      },
-      ipAddress,
-      userAgent,
-    })
-    await categoryRuleRepository.deleteCategoryRule({
-      connection,
-      ruleId,
-    })
-    await connection.commit()
-
-    return {
-      id: ruleId,
-    }
-  } catch (error) {
-    await connection.rollback()
-    throw error
-  } finally {
-    connection.release()
-  }
-}
-
 async function deleteCategoryRuleGroup({
   ruleId: rawRuleId,
   operatorId,
@@ -1015,11 +859,9 @@ async function testCategoryRuleMatch({
 
 module.exports = {
   createCategoryRuleGroup,
-  updateCategoryRule,
   updateCategoryRuleGroup,
   updateCategoryRuleGroupStatus,
   testCategoryRuleMatch,
-  deleteCategoryRule,
   deleteCategoryRuleGroup,
   listCategoryRules,
   listCategoryRuleNameOptions,
