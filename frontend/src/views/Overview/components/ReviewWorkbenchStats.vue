@@ -14,7 +14,7 @@ defineProps<{
 <template>
   <section
     class="summary-grid"
-    aria-label="本周核心数据"
+    aria-label="审核待办统计"
   >
     <article
       v-for="metric in metrics"
@@ -32,7 +32,7 @@ defineProps<{
 <style scoped>
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   margin-bottom: 18px;
 }
