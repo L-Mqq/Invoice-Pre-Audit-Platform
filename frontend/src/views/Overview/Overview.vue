@@ -138,19 +138,19 @@ const workbenchMetrics = computed<SummaryMetric[]>(() => {
     {
       label: '待审核',
       value: String(summary?.pendingReviewCount ?? 0),
-      description: '等待管理员进行资质审核',
+      description: '已提交审核，等待管理员进行资质审核',
       tone: 'warning',
     },
     {
       label: '待补凭证',
       value: String(summary?.pendingVoucherCount ?? 0),
-      description: '需要补充订单截图或支付记录',
+      description: '已提交审核，需要补充订单截图或支付记录',
       tone: 'warning',
     },
     {
       label: '待人工处理',
       value: String(summary?.pendingManualCount ?? 0),
-      description: '需要确认品类或补全发票信息',
+      description: '已提交审核，需要确认品类或补全发票信息',
       tone: 'danger',
     },
   ]

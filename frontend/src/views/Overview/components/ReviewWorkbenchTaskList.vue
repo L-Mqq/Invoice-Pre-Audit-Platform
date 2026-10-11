@@ -24,7 +24,7 @@ defineProps<{
       <div class="card-heading">
         <div>
           <h2>优先处理</h2>
-          <p>按待办类型和提交时间排列的示例任务</p>
+          <p>已提交审核的待办，按处理优先级和提交时间排列</p>
         </div>
         <el-tag type="danger">{{ tasks.length }} 项</el-tag>
       </div>

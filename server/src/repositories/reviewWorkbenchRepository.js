@@ -51,7 +51,8 @@ async function getPendingSummary() {
        COALESCE(SUM(${taskTypeExpression} = 'pending_manual'), 0)
          AS pending_manual_count
      FROM invoices i
-     ${pendingWeeklyVoucherJoin}`,
+     ${pendingWeeklyVoucherJoin}
+     WHERE i.submitted_at IS NOT NULL`,
   )
 
   return rows[0] || {}
@@ -75,7 +76,8 @@ async function findPriorityTasks({
        pending_weekly_voucher.has_pending_voucher
      FROM invoices i
      ${pendingWeeklyVoucherJoin}
-     WHERE ${taskTypeExpression} IS NOT NULL
+     WHERE i.submitted_at IS NOT NULL
+       AND ${taskTypeExpression} IS NOT NULL
      ORDER BY
        CASE ${taskTypeExpression}
          WHEN 'pending_manual' THEN 1

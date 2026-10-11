@@ -26,8 +26,8 @@ const hasExceptions = computed(() => {
     <template #header>
       <div class="card-heading">
         <div>
-          <h2>异常关注</h2>
-          <p>需要优先核验的异常情况</p>
+          <h2>上传与识别异常</h2>
+          <p>包含未提交审核的待处理记录</p>
         </div>
       </div>
     </template>
