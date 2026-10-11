@@ -47,7 +47,6 @@ function getCategoryTagType(result: CategoryResult) {
         <span>共 {{ total }} 条规则</span>
       </div>
       <el-button
-        link
         @click="emit('showLogs')"
       >
         查看操作记录

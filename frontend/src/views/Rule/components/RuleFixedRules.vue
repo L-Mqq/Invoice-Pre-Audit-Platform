@@ -8,9 +8,6 @@
         <strong>固定审核规则</strong>
         <span>由系统规则引擎执行，当前不可在此页修改</span>
       </div>
-      <el-button link>
-        查看规则说明
-      </el-button>
     </div>
     <div class="fixed-rule-grid">
       <div>
