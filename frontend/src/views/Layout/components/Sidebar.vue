@@ -36,7 +36,7 @@ function handleSelect(key: string) {
     <el-menu ref="menuRef" class="side-menu" :default-active="selected" @select="handleSelect">
       <el-menu-item index="dashboard">
         <span class="menu-icon">▦</span>
-        <span>本周概览</span>
+        <span>审核工作台</span>
       </el-menu-item>
 
       <el-sub-menu index="invoice">
