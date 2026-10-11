@@ -17,6 +17,7 @@ const voucherRouter = require('./src/routes/voucher')
 const voucherFileRouter = require('./src/routes/voucherFile')
 const financeRouter = require('./src/routes/finance')
 const categoryRuleRouter = require('./src/routes/categoryRule')
+const overviewRouter = require('./src/routes/overview')
 
 const app = express()
 const apiRouter = express.Router()
@@ -50,6 +51,7 @@ apiRouter.use('/vouchers', voucherRouter)
 apiRouter.use('/voucher-files', voucherFileRouter)
 apiRouter.use('/finance', financeRouter)
 apiRouter.use('/category-rules', categoryRuleRouter)
+apiRouter.use('/overview', overviewRouter)
 
 // 业务路由统一挂载在 /api 下
 app.use('/api', apiRouter)
