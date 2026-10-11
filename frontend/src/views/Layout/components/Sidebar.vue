@@ -48,7 +48,7 @@ function handleSelect(key: string) {
         </template>
         <el-menu-item index="upload-invoice">上传发票</el-menu-item>
         <el-menu-item index="invoice-list">发票列表</el-menu-item>
-        <el-menu-item index="reimbursement-progress">报销进度</el-menu-item>
+        <el-menu-item index="reimbursement-progress">财务管理</el-menu-item>
       </el-sub-menu>
 
       <el-menu-item index="rules">

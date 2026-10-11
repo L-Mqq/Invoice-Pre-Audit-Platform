@@ -288,7 +288,7 @@ function getBackLabel(): string {
   }
 
   if (route.query.from === 'reimbursement-progress') {
-    return '← 返回报销进度'
+    return '← 返回财务管理'
   }
 
   return '← 返回发票列表'

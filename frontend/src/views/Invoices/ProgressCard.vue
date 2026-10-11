@@ -373,8 +373,8 @@ onMounted(async () => {
   <section v-loading="loading" class="progress-page">
     <div class="page-heading">
       <div>
-        <p class="eyebrow">REIMBURSEMENT PROGRESS</p>
-        <h1>报销进度</h1>
+        <p class="eyebrow">FINANCE MANAGEMENT</p>
+        <h1>财务管理</h1>
         <p class="subtitle">按销售方和自然周汇总财务提交与最终报销处理进度。</p>
       </div>
 
