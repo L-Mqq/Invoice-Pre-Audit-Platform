@@ -1,4 +1,14 @@
 <script setup lang="ts">
+import {
+  computed,
+  onMounted,
+  ref,
+} from 'vue'
+import {
+  getReviewWorkbench,
+  type ReviewWorkbenchPreAuditStatus,
+  type ReviewWorkbenchResponse,
+} from '../../apis/reviewWorkbench'
 import ReviewWorkbenchStats from './components/ReviewWorkbenchStats.vue'
 import ReviewWorkbenchExceptionList from './components/ReviewWorkbenchExceptionList.vue'
 import ReviewWorkbenchQuickActions from './components/ReviewWorkbenchQuickActions.vue'
@@ -11,7 +21,7 @@ interface SummaryMetric {
   tone: 'primary' | 'success' | 'warning' | 'danger' | 'info'
 }
 
-const workbenchMetrics: SummaryMetric[] = [
+const staticWorkbenchMetrics: SummaryMetric[] = [
   {
     label: '待审核',
     value: '5',
@@ -32,7 +42,7 @@ const workbenchMetrics: SummaryMetric[] = [
   },
 ]
 
-const priorityTasks = [
+const staticPriorityTasks = [
   {
     invoiceNumber: '2695200000373999002',
     sellerName: '广州新程科技有限公司',
@@ -71,7 +81,7 @@ const priorityTasks = [
   },
 ]
 
-const exceptions = [
+const staticExceptions = [
   {
     label: '疑似重复发票',
     count: '2',
@@ -91,6 +101,150 @@ const exceptions = [
     tone: 'primary' as const,
   },
 ]
+
+const workbenchData = ref<ReviewWorkbenchResponse | null>(null)
+const isLoading = ref(false)
+const errorMessage = ref('')
+
+const statusPresentation: Record<
+  ReviewWorkbenchPreAuditStatus,
+  {
+    label: string
+    tone: 'primary' | 'warning' | 'danger'
+  }
+> = {
+  pending: {
+    label: '待审核',
+    tone: 'primary',
+  },
+  pending_voucher: {
+    label: '待补凭证',
+    tone: 'warning',
+  },
+  pending_weekly_voucher: {
+    label: '待补凭证',
+    tone: 'warning',
+  },
+  pending_manual: {
+    label: '待人工处理',
+    tone: 'danger',
+  },
+}
+
+const workbenchMetrics = computed<SummaryMetric[]>(() => {
+  const summary = workbenchData.value?.summary
+
+  return [
+    {
+      label: '待审核',
+      value: String(summary?.pendingReviewCount ?? 0),
+      description: '等待管理员进行资质审核',
+      tone: 'warning',
+    },
+    {
+      label: '待补凭证',
+      value: String(summary?.pendingVoucherCount ?? 0),
+      description: '需要补充订单截图或支付记录',
+      tone: 'warning',
+    },
+    {
+      label: '待人工处理',
+      value: String(summary?.pendingManualCount ?? 0),
+      description: '需要确认品类或补全发票信息',
+      tone: 'danger',
+    },
+  ]
+})
+
+const priorityTasks = computed(() => {
+  return (workbenchData.value?.priorityTasks ?? []).map((task) => {
+    const presentation = statusPresentation[task.preAuditStatus]
+
+    return {
+      invoiceId: task.invoiceId,
+      invoiceNumber: task.invoiceNumber || '未识别',
+      sellerName: task.sellerName || '销售方未识别',
+      totalAmount: formatAmount(task.totalAmount),
+      submittedAt: formatSubmittedAt(task.submittedAt),
+      statusLabel: presentation.label,
+      statusTone: presentation.tone,
+      reason: task.reason || '暂无待处理原因说明。',
+    }
+  })
+})
+
+const exceptions = computed(() => {
+  const data = workbenchData.value?.exceptions
+
+  return [
+    {
+      label: '疑似重复发票',
+      count: String(data?.duplicateCount ?? 0),
+      description: '发票号码或销售方信息存在重复风险。',
+      tone: 'warning' as const,
+    },
+    {
+      label: '识别失败',
+      count: String(data?.extractionFailedCount ?? 0),
+      description: '文件内容无法可靠识别，需要人工录入。',
+      tone: 'danger' as const,
+    },
+    {
+      label: '资料不完整',
+      count: String(data?.dataIncompleteCount ?? 0),
+      description: '发票或关联材料缺少必要字段。',
+      tone: 'primary' as const,
+    },
+  ]
+})
+
+function formatAmount(amount: number): string {
+  return new Intl.NumberFormat('zh-CN', {
+    style: 'currency',
+    currency: 'CNY',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount)
+}
+
+function formatSubmittedAt(submittedAt: string | null): string {
+  if (!submittedAt) {
+    return '未提交'
+  }
+
+  const date = new Date(submittedAt)
+
+  if (Number.isNaN(date.getTime())) {
+    return submittedAt
+  }
+
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date)
+}
+
+async function loadWorkbench(): Promise<void> {
+  isLoading.value = true
+  errorMessage.value = ''
+
+  try {
+    workbenchData.value = await getReviewWorkbench()
+  } catch (error) {
+    workbenchData.value = null
+    errorMessage.value = error instanceof Error ? error.message : '获取审核工作台数据失败'
+  } finally {
+    isLoading.value = false
+  }
+}
+
+onMounted(() => {
+  void loadWorkbench()
+})
 
 const quickActions = [
   {
@@ -128,12 +282,30 @@ const quickActions = [
         </p>
       </div>
       <el-tag
+        v-if="false"
         type="info"
         effect="plain"
       >
         静态示例数据
       </el-tag>
     </section>
+
+    <el-tag
+      :type="errorMessage ? 'danger' : isLoading ? 'warning' : 'success'"
+      class="data-state"
+      effect="plain"
+    >
+      {{ errorMessage ? '数据加载失败' : isLoading ? '数据加载中' : '实时数据' }}
+    </el-tag>
+
+    <el-alert
+      v-if="errorMessage"
+      class="load-error"
+      :title="errorMessage"
+      type="error"
+      :closable="false"
+      show-icon
+    />
 
     <ReviewWorkbenchStats :metrics="workbenchMetrics" />
 
@@ -181,6 +353,16 @@ const quickActions = [
   margin: 10px 0 0;
   color: #94a3b8;
   font-size: 14px;
+}
+
+.load-error {
+  margin-bottom: 18px;
+}
+
+.data-state {
+  display: flex;
+  width: max-content;
+  margin: -14px 0 18px auto;
 }
 
 .workbench-grid {

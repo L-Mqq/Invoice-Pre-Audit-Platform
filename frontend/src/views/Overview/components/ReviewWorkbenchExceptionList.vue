@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import {
+  computed,
+} from 'vue'
 interface ExceptionItem {
   label: string
   count: string
@@ -6,9 +9,13 @@ interface ExceptionItem {
   tone: 'primary' | 'warning' | 'danger'
 }
 
-defineProps<{
+const props = defineProps<{
   items: ExceptionItem[]
 }>()
+
+const hasExceptions = computed(() => {
+  return props.items.some((item) => Number(item.count) > 0)
+})
 </script>
 
 <template>
@@ -25,7 +32,10 @@ defineProps<{
       </div>
     </template>
 
-    <div class="exception-list">
+    <div
+      v-if="hasExceptions"
+      class="exception-list"
+    >
       <article
         v-for="item in items"
         :key="item.label"
@@ -38,6 +48,11 @@ defineProps<{
         <strong :class="`exception-count--${item.tone}`">{{ item.count }}</strong>
       </article>
     </div>
+    <el-empty
+      v-else
+      :image-size="76"
+      description="暂无异常事项"
+    />
   </el-card>
 </template>
 

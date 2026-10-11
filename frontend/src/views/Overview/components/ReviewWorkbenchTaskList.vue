@@ -1,5 +1,6 @@
 <script setup lang="ts">
 interface PriorityTask {
+  invoiceId: number
   invoiceNumber: string
   sellerName: string
   totalAmount: string
@@ -29,10 +30,13 @@ defineProps<{
       </div>
     </template>
 
-    <div class="task-list">
+    <div
+      v-if="tasks.length"
+      class="task-list"
+    >
       <article
         v-for="task in tasks"
-        :key="`${task.invoiceNumber}-${task.sellerName}`"
+        :key="task.invoiceId"
         class="task-item"
       >
         <div class="task-topline">
@@ -55,6 +59,11 @@ defineProps<{
         <p>{{ task.reason }}</p>
       </article>
     </div>
+    <el-empty
+      v-else
+      :image-size="76"
+      description="暂无待处理任务"
+    />
   </el-card>
 </template>
 
