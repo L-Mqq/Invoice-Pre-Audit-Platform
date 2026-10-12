@@ -198,6 +198,28 @@ function formatAmount(amount: number | string | null): string {
   return `¥${Number(amount || 0).toFixed(2)}`
 }
 
+function formatUnitPrice(unitPrice: number | string | null): string {
+  if (unitPrice === null || unitPrice === '') {
+    return '—'
+  }
+
+  const normalizedPrice = String(unitPrice).trim()
+  const matches = normalizedPrice.match(/^(\d+)(?:\.(\d+))?$/)
+
+  if (!matches) {
+    return `¥${normalizedPrice}`
+  }
+
+  const integerPart = matches[1] || ''
+  const decimalPart = (matches[2] || '').replace(/0+$/, '')
+
+  if (decimalPart.length <= 2) {
+    return `¥${integerPart}.${decimalPart.padEnd(2, '0')}`
+  }
+
+  return `¥${integerPart}.${decimalPart.slice(0, 6)}…`
+}
+
 function getCategoryResult(item: InvoiceDetailItem): string {
   return item.finalCategoryResult || item.manualCategoryResult || item.aiCategoryResult || '待判断'
 }
@@ -702,7 +724,7 @@ async function submitDuplicateReview() {
         <div class="review-item-summary">
           <strong>{{ selectedReviewItem.itemName }}</strong>
           <span>
-            单价 {{ formatAmount(selectedReviewItem.unitPrice) }}
+            单价 {{ formatUnitPrice(selectedReviewItem.unitPrice) }}
             · 金额 {{ formatAmount(selectedReviewItem.lineAmount) }}
           </span>
         </div>

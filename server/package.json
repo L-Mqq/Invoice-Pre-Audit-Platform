@@ -5,6 +5,8 @@
   "scripts": {
     "start": "node app.js",
     "dev": "node --watch app.js",
+    "test:price-judgment": "node src/scripts/test-price-judgment.js",
+    "test:unit-price-precision": "node src/scripts/test-invoice-unit-price-precision.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "db:check": "node src/scripts/checkDatabase.js"
   },

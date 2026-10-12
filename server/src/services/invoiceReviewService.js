@@ -8,6 +8,11 @@ const {
   classifyUnitPrice,
 } = require('./priceJudgmentService')
 const {
+  compareDecimals,
+  normalizeDecimalText,
+  parseDecimal,
+} = require('../utils/decimal')
+const {
   getDataIssueReason,
   getManualProcessingContext,
   toDataIssues,
@@ -146,6 +151,29 @@ function normalizeNonNegativeNumber({
 
   return normalizedValue
 }
+
+function normalizeNonNegativeDecimalText({
+  value,
+  fieldName,
+  maxScale = 13,
+}) {
+  if (value === null || value === undefined || String(value).trim() === '') {
+    throw createHttpError(400, `${fieldName}不能为空`)
+  }
+
+  const normalizedValue = normalizeDecimalText(value)
+  const decimalValue = parseDecimal(normalizedValue)
+
+  if (!decimalValue || decimalValue.isNegative) {
+    throw createHttpError(400, `${fieldName}必须是非负数`)
+  }
+
+  if (maxScale !== undefined && decimalValue.scale > maxScale) {
+    throw createHttpError(400, `${fieldName}最多支持${maxScale}位小数`)
+  }
+
+  return normalizedValue
+}
 // 校验“人工补全说明”、
 function normalizeManualNote(note) {
   const normalizedNote = normalizeOptionalText({
@@ -241,7 +269,7 @@ function normalizeManualItem({
       value: item.quantity,
       fieldName: `items[${index}].quantity`,
     }),
-    unitPrice: normalizeNonNegativeNumber({
+    unitPrice: normalizeNonNegativeDecimalText({
       value: item.unitPrice,
       fieldName: `items[${index}].unitPrice`,
     }),
@@ -337,7 +365,7 @@ function hasItemDataChanged({
 }) {
   return item.item_name !== input.itemName
     || !isSameNumber(item.quantity, input.quantity)
-    || !isSameNumber(item.unit_price, input.unitPrice)
+    || !isSameDecimal(item.unit_price, input.unitPrice)
     || !isSameNumber(item.line_amount, input.lineAmount)
 }
 // 根据商品品类结果判断发票是否能通过
@@ -1577,6 +1605,17 @@ async function reviewInvoiceDuplicate({
   } finally {
     connection.release()
   }
+}
+
+function isSameDecimal(left, right) {
+  const leftDecimal = parseDecimal(left)
+  const rightDecimal = parseDecimal(right)
+
+  if (!leftDecimal || !rightDecimal) {
+    return false
+  }
+
+  return compareDecimals(leftDecimal, rightDecimal) === 0
 }
 
 module.exports = {

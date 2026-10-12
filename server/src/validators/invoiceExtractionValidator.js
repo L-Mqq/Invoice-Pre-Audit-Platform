@@ -1,3 +1,10 @@
+const {
+  multiplyDecimals,
+  parseDecimal,
+  roundHalfUpToScale,
+  toScaledInteger,
+} = require('../utils/decimal')
+
 const REQUIRED_FIELDS = [
   'invoiceNumber',
   'sellerName',
@@ -102,16 +109,40 @@ function validateInvoiceExtraction(input) {
       for (const field of ['itemName', 'quantity', 'unitPrice', 'amount']) {
         if (isBlank(item[field])) errors.push(createError(`items.${field}`, 'REQUIRED', `商品${field}不能为空`, index))
       }
-      for (const field of ['quantity', 'unitPrice', 'amount']) {
-        const value = toNumber(item[field])
-        if (value === null) errors.push(createError(`items.${field}`, 'FORMAT', `商品${field}必须是合法数字`, index))
-        else if (value < 0) errors.push(createError(`items.${field}`, 'RANGE', `商品${field}不能为负数`, index))
+      const quantity = parseDecimal(item.quantity)
+      const unitPrice = parseDecimal(item.unitPrice)
+      const amount = parseDecimal(item.amount)
+      const decimalFields = {
+        quantity,
+        unitPrice,
+        amount,
       }
-      const quantity = toNumber(item.quantity)
-      const unitPrice = toNumber(item.unitPrice)
-      const amount = toNumber(item.amount)
-      if (quantity !== null && unitPrice !== null && amount !== null && Math.abs(quantity * unitPrice - amount) > 0.02) {
+
+      for (const [field, value] of Object.entries(decimalFields)) {
+        if (!value) {
+          errors.push(createError(`items.${field}`, 'FORMAT', `商品${field}必须是合法数字`, index))
+        } else if (value.isNegative) {
+          errors.push(createError(`items.${field}`, 'RANGE', `商品${field}不能为负数`, index))
+        }
+      }
+
+      if (
+        quantity
+        && unitPrice
+        && amount
+        && !quantity.isNegative
+        && !unitPrice.isNegative
+        && !amount.isNegative
+      ) {
+        const calculatedAmountInCents = roundHalfUpToScale(
+          multiplyDecimals(quantity, unitPrice),
+          2,
+        )
+        const lineAmountInCents = toScaledInteger(amount, 2)
+
+        if (lineAmountInCents === null || calculatedAmountInCents !== lineAmountInCents) {
         errors.push(createError('items.amount', 'MISMATCH', '商品数量乘单价与金额不一致', index))
+      }
       }
     })
   }

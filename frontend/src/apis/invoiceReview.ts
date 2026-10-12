@@ -93,7 +93,7 @@ export interface ManualInvoiceItemData {
   itemId?: number
   itemName: string
   quantity: number
-  unitPrice: number
+  unitPrice: string
   lineAmount: number
 }
 

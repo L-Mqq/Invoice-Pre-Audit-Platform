@@ -19,7 +19,7 @@ interface ManualDataFormItem {
   itemId?: number
   itemName: string
   quantity: number | null
-  unitPrice: number | null
+  unitPrice: string
   lineAmount: number | null
 }
 
@@ -71,6 +71,42 @@ function toNumber(value: number | string | null): number | null {
     : null
 }
 
+function toDecimalText(value: number | string | null): string {
+  if (value === null || value === undefined) {
+    return ''
+  }
+
+  return String(value).trim()
+}
+
+function normalizeComparableDecimal(value: string): string | null {
+  const normalizedValue = value.trim()
+  const matches = normalizedValue.match(/^(\d+)(?:\.(\d+))?$/)
+
+  if (!matches) {
+    return null
+  }
+
+  const integerPart = (matches[1] || '').replace(/^0+(?=\d)/, '')
+  const decimalPart = (matches[2] || '').replace(/0+$/, '')
+
+  if (!decimalPart) {
+    return integerPart
+  }
+
+  return `${integerPart}.${decimalPart}`
+}
+
+function normalizeUnitPrice(value: string): string | null {
+  const normalizedValue = value.trim()
+
+  if (!/^\d+(?:\.\d{1,13})?$/.test(normalizedValue)) {
+    return null
+  }
+
+  return normalizedValue
+}
+
 function toDateValue(value: string | null): string {
   return value ? value.slice(0, 10) : ''
 }
@@ -83,7 +119,7 @@ function createFormItem(
     itemId: item.id,
     itemName: item.itemName || '',
     quantity: toNumber(item.quantity),
-    unitPrice: toNumber(item.unitPrice),
+    unitPrice: toDecimalText(item.unitPrice),
     lineAmount: toNumber(item.lineAmount),
   }
 }
@@ -132,7 +168,7 @@ function addItem() {
     key: `new-${newItemSequence}`,
     itemName: '',
     quantity: null,
-    unitPrice: null,
+    unitPrice: '',
     lineAmount: null,
   })
 }
@@ -146,14 +182,28 @@ function removeNewItem(index: number) {
 }
 
 function hasSameNumber(
-  left: number | null,
-  right: number | null,
+  left: number | string | null,
+  right: number | string | null,
 ): boolean {
   if (left === null || right === null) {
     return left === right
   }
 
+  if (typeof left === 'string' || typeof right === 'string') {
+    return hasSameUnitPrice(String(left), String(right))
+  }
+
   return Math.abs(left - right) < 0.000001
+}
+
+function hasSameUnitPrice(
+  left: string,
+  right: string,
+): boolean {
+  const normalizedLeft = normalizeComparableDecimal(left)
+  const normalizedRight = normalizeComparableDecimal(right)
+
+  return normalizedLeft !== null && normalizedLeft === normalizedRight
 }
 
 function hasItemChanged(
@@ -174,7 +224,7 @@ function validateItem(item: ManualDataFormItem): ManualInvoiceItemData | null {
 
   if (
     item.quantity === null
-    || item.unitPrice === null
+      || !normalizeUnitPrice(item.unitPrice)
     || item.lineAmount === null
   ) {
     ElMessage.warning(`请补全商品“${item.itemName.trim()}”的数量、单价和金额`)
@@ -183,7 +233,6 @@ function validateItem(item: ManualDataFormItem): ManualInvoiceItemData | null {
 
   if (
     item.quantity < 0
-    || item.unitPrice < 0
     || item.lineAmount < 0
   ) {
     ElMessage.warning('商品数量、单价和金额不能为负数')
@@ -392,11 +441,10 @@ watch(
             </el-table-column>
             <el-table-column label="单价" width="150">
               <template #default="{ row }">
-                <el-input-number
+                <el-input
                   v-model="row.unitPrice"
-                  :min="0"
-                  :precision="2"
-                  controls-position="right"
+                  inputmode="decimal"
+                  placeholder="最多 13 位小数"
                 />
               </template>
             </el-table-column>
@@ -512,6 +560,7 @@ watch(
   margin-bottom: 14px;
 }
 
+.item-table :deep(.el-input),
 .item-table :deep(.el-input-number) {
   width: 100%;
 }

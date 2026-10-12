@@ -13,6 +13,28 @@ function formatAmount(amount: number | string | null): string {
   return `¥${Number(amount || 0).toFixed(2)}`
 }
 
+function formatUnitPrice(unitPrice: number | string | null): string {
+  if (unitPrice === null || unitPrice === '') {
+    return '—'
+  }
+
+  const normalizedPrice = String(unitPrice).trim()
+  const matches = normalizedPrice.match(/^(\d+)(?:\.(\d+))?$/)
+
+  if (!matches) {
+    return `¥${normalizedPrice}`
+  }
+
+  const integerPart = matches[1]
+  const decimalPart = (matches[2] || '').replace(/0+$/, '')
+
+  if (decimalPart.length <= 2) {
+    return `¥${integerPart}.${decimalPart.padEnd(2, '0')}`
+  }
+
+  return `¥${integerPart}.${decimalPart.slice(0, 6)}…`
+}
+
 function getPriceTypeLabel(priceType: InvoiceDetailItem['priceType']): string {
   const labels = {
     material: '材料',
@@ -79,7 +101,7 @@ function getCategoryResultType(
         width="120"
       >
         <template #default="{ row }">
-          {{ formatAmount(row.unitPrice) }}
+          {{ formatUnitPrice(row.unitPrice) }}
         </template>
       </el-table-column>
       <el-table-column

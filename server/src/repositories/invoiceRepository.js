@@ -46,7 +46,13 @@ async function createItems({ connection = pool, invoiceId, items }) {
       `INSERT INTO invoice_items
         (invoice_id, item_name, quantity, unit_price, line_amount)
        VALUES (?, ?, ?, ?, ?)`,
-      [invoiceId, item.itemName, Number(item.quantity), Number(item.unitPrice), Number(item.amount)],
+      [
+        invoiceId,
+        item.itemName,
+        item.quantity,
+        item.unitPrice,
+        item.amount,
+      ],
     )
     createdItems.push({ id: result.insertId, ...item })
   }

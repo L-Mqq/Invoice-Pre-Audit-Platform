@@ -40,6 +40,28 @@ function firstValue(source, names) {
   return null
 }
 
+function normalizeDecimalValue(value) {
+  if (value === null || value === undefined) {
+    return null
+  }
+
+  if (typeof value === 'number') {
+    return Number.isFinite(value)
+      ? value.toString()
+      : null
+  }
+
+  if (typeof value !== 'string') {
+    return value
+  }
+
+  const normalizedValue = value
+    .replace(/[￥¥元,\s]/g, '')
+    .trim()
+
+  return normalizedValue || null
+}
+
 function normalizeItem(item) {
   const source = item && typeof item === 'object'
     ? item
@@ -58,12 +80,12 @@ function normalizeItem(item) {
       'Quantity',
       '数量',
     ]),
-    unitPrice: firstValue(source, [
+    unitPrice: normalizeDecimalValue(firstValue(source, [
       'unitPrice',
       'UnitPrice',
       'Price',
       '单价',
-    ]),
+    ])),
     amount: firstValue(source, [
       'amount',
       'Amount',
@@ -281,6 +303,7 @@ async function structureInvoiceText(
 module.exports = {
   SOURCE_TYPES,
   isEmptyInvoiceTemplate,
+  normalizeDecimalValue,
   normalizeStructuredResult,
   structureInvoiceText,
 }
