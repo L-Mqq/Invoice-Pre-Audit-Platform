@@ -215,11 +215,23 @@ function createMessages({
 }) {
   const isOcrSource = sourceType === SOURCE_TYPES.TENCENT_OCR
   const systemContent = isOcrSource
-    ? '你是发票信息结构化助手。输入是腾讯 OCR 返回的 JSON。请从其中已识别字段提取发票信息和商品明细。只返回 JSON，不得编造。'
-    : '你是发票信息结构化助手。输入是从 PDF 提取的原始发票文本，不是腾讯 OCR JSON。请依据文本提取发票信息和商品明细。只返回 JSON，不得编造。'
+    ? '你是发票信息结构化助手。输入是腾讯 OCR 返回的 JSON。请从其中已识别字段提取发票信息和商品明细。只返回 JSON，不得编造、推算或补造数据。'
+    : '你是发票信息结构化助手。输入是从 PDF 提取的原始发票文本，不是腾讯 OCR JSON。请依据文本提取发票信息和商品明细。只返回 JSON，不得编造、推算或补造数据。'
   const sourceDescription = isOcrSource
     ? '腾讯 OCR 结构化 JSON'
     : 'PDF 原始文本'
+  const sourceRules = isOcrSource
+    ? `OCR 输入中的字段可能带有 name、value 和 row。商品明细优先使用字段名称和相同 row 关联，不能将不同 row 的数值拼成一条商品明细。`
+    : `PDF 文本中的表格列可能被拆散或错序。必须依据表头和同一商品行确认列归属，不能仅根据相邻数字猜测字段。`
+  const extractionRules = [
+    '所有能可靠识别的字段必须填写；仅在原始输入确实不存在或无法可靠确认时填写 null。',
+    '金额和数量字段必须以十进制字符串输出，不得输出 JSON 数字。尤其 unitPrice 必须保留原始精度，例如 "0.9424778761062"。',
+    '每一条 items 必须只对应原始发票中的同一商品行，itemName、quantity、unitPrice、amount 不得跨行组合。',
+    'quantity 只能取“数量”列；unitPrice 只能取“单价”列；amount 只能取该商品行的“金额”或“不含税金额”列。',
+    'taxAmount 只能取发票或商品行的“税额”列，taxAmount、税率、金额均不得填入 unitPrice。',
+    'amountWithoutTax 只能取发票合计栏的“不含税金额”；totalAmount 只能取“价税合计”。',
+    '不得通过数量、金额、税率或税额反推单价；不得自行计算、修正或补造 quantity、unitPrice、amount。无法可靠确认时返回 null。',
+  ].join('\n- ')
 
   return [
     {
@@ -228,7 +240,7 @@ function createMessages({
     },
     {
       role: 'user',
-      content: `请严格按照以下 JSON 结构输出：\n${JSON.stringify(invoiceSchema)}\n\n规则：输入中能够明确识别的字段必须填写；仅在输入中确实不存在或无法可靠识别时才填写 null；不得直接照抄示例中的 null。\n\n${sourceDescription}：\n${text}`,
+      content: `请严格按照以下 JSON 结构输出：\n${JSON.stringify(invoiceSchema)}\n\n提取规则：\n- ${extractionRules}\n- ${sourceRules}\n\n${sourceDescription}：\n${text}`,
     },
   ]
 }
@@ -302,6 +314,7 @@ async function structureInvoiceText(
 
 module.exports = {
   SOURCE_TYPES,
+  createMessages,
   isEmptyInvoiceTemplate,
   normalizeDecimalValue,
   normalizeStructuredResult,
