@@ -62,9 +62,26 @@ function createError(field, code, message, index = null) {
   return { field, code, message, ...(index === null ? {} : { index }) }
 }
 
+function toMoneyInCents(value) {
+  const decimal = parseDecimal(value)
+
+  if (!decimal || decimal.isNegative) {
+    return null
+  }
+
+  return toScaledInteger(decimal, 2)
+}
+
+function sumMoney(values) {
+  return values.reduce((total, value) => {
+    return total + value
+  }, 0n)
+}
+
 // 主校验函数
 function validateInvoiceExtraction(input) {
   const errors = []
+  const itemAmountsInCents = []
   const source = input && typeof input === 'object' && !Array.isArray(input) ? input : {}
   const data = Object.fromEntries(OUTPUT_FIELDS.map((field) => [field, source[field] ?? (field === 'items' ? [] : null)]))
 
@@ -140,11 +157,56 @@ function validateInvoiceExtraction(input) {
         )
         const lineAmountInCents = toScaledInteger(amount, 2)
 
+        if (lineAmountInCents !== null) {
+          itemAmountsInCents.push(lineAmountInCents)
+        }
+
         if (lineAmountInCents === null || calculatedAmountInCents !== lineAmountInCents) {
         errors.push(createError('items.amount', 'MISMATCH', '商品数量乘单价与金额不一致', index))
       }
       }
     })
+  }
+
+  const hasAllItemAmounts = Array.isArray(data.items)
+    && data.items.length > 0
+    && itemAmountsInCents.length === data.items.length
+  const amountWithoutTaxInCents = isBlank(data.amountWithoutTax)
+    ? null
+    : toMoneyInCents(data.amountWithoutTax)
+
+  if (
+    hasAllItemAmounts
+    && amountWithoutTaxInCents !== null
+    && sumMoney(itemAmountsInCents) !== amountWithoutTaxInCents
+  ) {
+    errors.push(createError(
+      'items.amount',
+      'MISMATCH',
+      '商品明细金额合计与不含税金额不一致',
+    ))
+  }
+
+  if (
+    !isBlank(data.amountWithoutTax)
+    && !isBlank(data.taxAmount)
+    && !isBlank(data.totalAmount)
+  ) {
+    const taxAmountInCents = toMoneyInCents(data.taxAmount)
+    const totalAmountInCents = toMoneyInCents(data.totalAmount)
+
+    if (
+      amountWithoutTaxInCents !== null
+      && taxAmountInCents !== null
+      && totalAmountInCents !== null
+      && amountWithoutTaxInCents + taxAmountInCents !== totalAmountInCents
+    ) {
+      errors.push(createError(
+        'totalAmount',
+        'MISMATCH',
+        '不含税金额与税额之和与价税合计不一致',
+      ))
+    }
   }
 
   return { valid: errors.length === 0, data, errors }

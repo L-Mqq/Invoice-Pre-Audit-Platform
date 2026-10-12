@@ -50,6 +50,37 @@ const highPrecisionUnitPriceInvoice = {
   ],
 }
 
+const shiftedColumnInvoice = {
+  ...highPrecisionUnitPriceInvoice,
+  invoiceNumber: 'TEST-SHIFTED-COLUMNS-001',
+  items: [
+    {
+      itemName: '*电子元件*电子线 30CM公对公杜邦线 #DP1',
+      quantity: '4.27',
+      unitPrice: '0.55',
+      amount: '2.35',
+    },
+    {
+      itemName: '*电子元件*电子线 XH2.54 4P转杜邦2.54-1P 20cm',
+      quantity: '9.42',
+      unitPrice: '1.23',
+      amount: '11.59',
+    },
+    {
+      itemName: '*电子元件*电子线 30CM公对母杜邦线 #DB9',
+      quantity: '3.82',
+      unitPrice: '0.50',
+      amount: '1.91',
+    },
+    {
+      itemName: '*电子元件*电子线 30CM母对母杜邦线 #IM4',
+      quantity: '3.27',
+      unitPrice: '0.42',
+      amount: '1.37',
+    },
+  ],
+}
+
 const cases = [
   {
     name: '正常结构化结果',
@@ -60,6 +91,19 @@ const cases = [
     name: '高精度单价发票金额校验',
     input: highPrecisionUnitPriceInvoice,
     expectedValid: true,
+  },
+  {
+    name: '商品列错位导致明细合计不一致',
+    input: shiftedColumnInvoice,
+    expectedValid: false,
+  },
+  {
+    name: '不含税金额加税额与价税合计不一致',
+    input: {
+      ...highPrecisionUnitPriceInvoice,
+      taxAmount: '2.71',
+    },
+    expectedValid: false,
   },
   {
     name: '高精度单价商品金额不一致',
