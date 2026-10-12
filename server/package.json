@@ -5,6 +5,7 @@
   "scripts": {
     "start": "node app.js",
     "dev": "node --watch app.js",
+    "test:category-prompt": "node src/scripts/test-category-classifier-prompt.js",
     "test:invoice-prompt": "node src/scripts/test-invoice-extraction-prompt.js",
     "test:invoice-validator": "node src/scripts/test-invoice-validator.js",
     "test:price-judgment": "node src/scripts/test-price-judgment.js",
