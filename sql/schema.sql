@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS upload_batches (
   id CHAR(36) NOT NULL COMMENT '上传批次 UUID',
   original_name VARCHAR(255) NOT NULL COMMENT '原始上传文件名',
-  file_type ENUM('pdf', 'zip', 'multiple_pdf') NOT NULL COMMENT '上传类型',
+  file_type ENUM('pdf', 'multiple_pdf', 'zip', 'mixed') NOT NULL COMMENT '上传类型',
   status ENUM('pending', 'processing', 'completed', 'partial_failed', 'failed') NOT NULL DEFAULT 'pending' COMMENT '批次处理状态',
   total_count INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '批次内待处理 PDF 数量',
   success_count INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '处理成功文件数量',
@@ -111,7 +111,8 @@ CREATE TABLE IF NOT EXISTS invoices (
 CREATE TABLE IF NOT EXISTS invoice_files (
   -- 发票原始文件定位表，storage_key 应通过后端接口访问。
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '文件主键',
-  invoice_id BIGINT UNSIGNED NOT NULL COMMENT '所属发票 ID',
+  batch_id CHAR(36) NULL COMMENT '所属上传批次 UUID',
+  invoice_id BIGINT UNSIGNED NULL COMMENT '解析成功后关联的发票 ID，解析失败时为空',
   original_name VARCHAR(255) NOT NULL COMMENT '用户上传时的原始文件名',
   storage_key VARCHAR(512) NOT NULL COMMENT '文件存储标识或相对路径',
   mime_type VARCHAR(128) NOT NULL COMMENT '文件 MIME 类型',
@@ -123,7 +124,9 @@ CREATE TABLE IF NOT EXISTS invoice_files (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '最后更新时间',
   PRIMARY KEY (id),
   KEY idx_invoice_files_sha256 (sha256),
+  KEY idx_invoice_files_batch (batch_id),
   KEY idx_invoice_files_invoice (invoice_id),
+  CONSTRAINT fk_invoice_files_batch FOREIGN KEY (batch_id) REFERENCES upload_batches (id) ON DELETE CASCADE,
   CONSTRAINT fk_invoice_files_invoice FOREIGN KEY (invoice_id) REFERENCES invoices (id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
@@ -256,3 +259,166 @@ CREATE TABLE IF NOT EXISTS operation_logs (
   KEY idx_operation_logs_created_at (created_at),
   CONSTRAINT fk_operation_logs_operator FOREIGN KEY (operator_id) REFERENCES users (id)
 ) ENGINE=InnoDB;
+
+-- 商品品类规则初始化数据。
+-- 每条 INSERT 仅写入一个 keyword；priority 使用表默认值，当前版本暂不参与匹配。
+-- 初始化数据库时一并写入以下默认规则。
+
+START TRANSACTION;
+
+-- 不可以
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('个人用品/清洁用品', '纸巾', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('个人用品/清洁用品', '湿巾', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('个人用品/清洁用品', '垃圾袋', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('个人用品/清洁用品', '清洁剂', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电脑外设', '鼠标', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电脑外设', '键盘', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电脑升级配件', '内存', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电脑升级配件', 'SSD', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电脑升级配件', 'HDD', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('摄像设备', 'USB摄像头', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('摄像设备', '工业相机', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('摄像设备', '深度相机', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('GPU/计算卡', '显卡', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('GPU/计算卡', 'AI加速卡', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('工控设备', '工控机', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('工控设备', 'PLC', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('工控设备', '嵌入式主机', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电脑整机', '台式机', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电脑整机', '笔记本', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电脑整机', '迷你主机', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('显示设备', '显示器', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('显示设备', '便携屏', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('影音设备', '麦克风', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('影音设备', '音箱', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('影音设备', '耳机', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('摄影设备', '数码相机', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('摄影设备', '镜头', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('摄影设备', '三脚架', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('摄影设备', '补光灯', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('个人电子产品', '手机', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('个人电子产品', '平板电脑', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('个人电子产品', '智能手表', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('个人电子产品', '充电宝', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('家居/人体工学用品', '桌椅', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('家居/人体工学用品', '显示器支架', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('加工服务', 'PCB打板', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('加工服务', '3D打印', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('加工服务', 'CNC', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('加工服务', '激光切割服务', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('软件/云服务', '软件许可证', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('软件/云服务', '云服务器', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('软件/云服务', '云GPU', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('软件/云服务', 'API充值', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('书籍资料', '专业书籍', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('书籍资料', '技术资料', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('展示宣传用品', '海报', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('展示宣传用品', '易拉宝', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('展示宣传用品', '展板', '不可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('展示宣传用品', '横幅', '不可以', TRUE);
+
+-- 存疑
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('其他存储设备', 'SD卡', '存疑', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('其他存储设备', 'TF卡', '存疑', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('其他存储设备', '移动硬盘', '存疑', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('无人机相关设备', '飞控', '存疑', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('无人机相关设备', '电调', '存疑', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('无人机相关设备', '桨叶', '存疑', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('无人机相关设备', '遥控器', '存疑', TRUE);
+
+-- 可以
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('嵌入式电子硬件', '开发板', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('嵌入式电子硬件', '电路板', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('嵌入式电子硬件', '电机', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('嵌入式电子硬件', '传感器', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('嵌入式电子硬件', '电子元器件', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('嵌入式电子硬件', '通信模块', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电源供电类', '电源适配器', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电源供电类', '开关电源', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电源供电类', 'DC-DC模块', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电池类', '锂电池', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电池类', '18650', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电池类', '电池组', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电池类', '电池盒', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('机器人部件', '舵机', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('机器人部件', '轮子', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('机器人部件', '履带', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('机器人部件', '减速器', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('机器人部件', '联轴器', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('机械结构件', '铝型材', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('机械结构件', '亚克力板', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('机械结构件', '支架', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('机械结构件', '轴承', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('机械结构件', '齿轮', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('紧固件', '螺丝', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('紧固件', '螺母', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('紧固件', '垫片', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('紧固件', '扎带', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电子加工耗材', 'PLA', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电子加工耗材', 'ABS', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电子加工耗材', '树脂', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电子加工耗材', '焊锡', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电子加工耗材', '焊锡膏', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电子加工耗材', '热缩管', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('线材', 'USB线', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('线材', '网线', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('线材', 'HDMI线', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('线材', '电源线', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('线材', '杜邦线', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('转接器', 'USB转串口', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('转接器', 'Type-C转HDMI', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('网络设备', '路由器', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('网络设备', '交换机', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('网络设备', '无线AP', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('通信扩展设备', 'USB网卡', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('通信扩展设备', '串口转换器', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('通信扩展设备', 'CAN转换器', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电脑扩展配件', 'USB Hub', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电脑扩展配件', '扩展坞', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电脑扩展配件', '读卡器', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('U盘', 'U盘', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('工具', '剪刀', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('工具', '钳子', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('工具', '电烙铁', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('工具', '焊笔', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('工具', '螺丝刀', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('工具', '电钻', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('工具', '热风枪', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('测量仪器', '万用表', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('测量仪器', '示波器', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('测量仪器', '测距仪', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('测量仪器', '电子秤', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电工/五金', '插座', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电工/五金', '插头', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电工/五金', '保险丝', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电工/五金', '接线端子', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电工/五金', '扳手', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('电工/五金', '钻头', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('办公用品', '打印纸', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('办公用品', '回形针', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('办公用品', '燕尾夹', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('办公用品', '中性笔', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('办公用品', '圆珠笔', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('办公用品', '记号笔', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('办公用品', '文件夹', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('办公用品', '订书机', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('打印耗材', '墨盒', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('打印耗材', '硒鼓', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('打印耗材', '碳粉', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('打印耗材', '标签纸', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('胶粘材料', '双面胶', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('胶粘材料', '绝缘胶带', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('胶粘材料', '502', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('胶粘材料', '热熔胶', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('劳保用品', '手套', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('劳保用品', '护目镜', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('劳保用品', '口罩', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('劳保用品', '防静电手环', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('包装用品', '纸箱', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('包装用品', '气泡膜', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('包装用品', '泡沫', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('包装用品', '封箱胶', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('指定生活电器', '排插', '可以', TRUE);
+INSERT INTO category_rules (rule_name, keyword, category_result, is_active) VALUES ('指定生活电器', '台灯', '可以', TRUE);
+
+COMMIT;
