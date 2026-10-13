@@ -1544,11 +1544,19 @@ async function reviewInvoiceDuplicate({
         operatorId: normalizedOperatorId,
       })
     } else {
+      const items = await invoiceReviewRepository.findItemsForQualificationReview({
+        connection,
+        invoiceId: normalizedInvoiceId,
+      })
+      const categoryDecision = getCategoryDecision(items)
+
       result = {
-        qualificationStatus: 'pending',
-        qualificationReason: normalizedNote
-          ? `已确认非重复：${normalizedNote}；等待提交审核`
-          : '已确认非重复，等待提交审核',
+        qualificationStatus: categoryDecision?.status || 'pending',
+        qualificationReason: categoryDecision?.reason || (
+          normalizedNote
+            ? `已确认非重复：${normalizedNote}；等待提交审核`
+            : '已确认非重复，等待提交审核'
+        ),
         cumulativeAmount: null,
         cumulativeWeekStart: null,
         submittedAt: null,
@@ -1619,6 +1627,7 @@ function isSameDecimal(left, right) {
 }
 
 module.exports = {
+  getCategoryDecision,
   reviewItemCategory,
   updateInvoiceManualData,
   submitInvoiceForReview,

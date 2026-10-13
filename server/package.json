@@ -9,6 +9,7 @@
     "test:invoice-prompt": "node src/scripts/test-invoice-extraction-prompt.js",
     "test:invoice-validator": "node src/scripts/test-invoice-validator.js",
     "test:price-judgment": "node src/scripts/test-price-judgment.js",
+    "test:duplicate-category-recovery": "node src/scripts/test-duplicate-category-recovery.js",
     "test:unit-price-precision": "node src/scripts/test-invoice-unit-price-precision.js",
     "test": "echo \"Error: no test specified\" && exit 1",
     "db:check": "node src/scripts/checkDatabase.js"
