@@ -21,8 +21,8 @@ function verifyPrompt(sourceType) {
   const content = messages[1]?.content || ''
 
   for (const expected of [
-    '必须以十进制字符串输出',
-    'unitPrice 只能取“单价”列',
+    '金额和数量必须是十进制字符串',
+    'unitPrice 只能取单价字段',
     '不得通过数量、金额、税率或税额反推单价',
     '不得跨行组合',
   ]) {
@@ -34,7 +34,7 @@ function verifyPrompt(sourceType) {
   }
 
   const sourceExpected = sourceType === SOURCE_TYPES.TENCENT_OCR
-    ? '相同 row 关联'
+    ? 'VatElectronicInvoiceFull'
     : '表格列可能被拆散或错序'
 
   assertIncludes({
@@ -42,6 +42,20 @@ function verifyPrompt(sourceType) {
     expected: sourceExpected,
     description: sourceType,
   })
+
+  if (sourceType === SOURCE_TYPES.TENCENT_OCR) {
+    for (const expected of [
+      'unitPrice=Price',
+      'amount=Total',
+      'data.VatElectronicItems',
+    ]) {
+      assertIncludes({
+        content,
+        expected,
+        description: sourceType,
+      })
+    }
+  }
 }
 
 function main() {

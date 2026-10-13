@@ -215,22 +215,21 @@ function createMessages({
 }) {
   const isOcrSource = sourceType === SOURCE_TYPES.TENCENT_OCR
   const systemContent = isOcrSource
-    ? '你是发票信息结构化助手。输入是腾讯 OCR 返回的 JSON。请从其中已识别字段提取发票信息和商品明细。只返回 JSON，不得编造、推算或补造数据。'
-    : '你是发票信息结构化助手。输入是从 PDF 提取的原始发票文本，不是腾讯 OCR JSON。请依据文本提取发票信息和商品明细。只返回 JSON，不得编造、推算或补造数据。'
+    ? '你是发票结构化助手。输入是腾讯 OCR JSON，只返回符合指定 Schema 的 JSON。'
+    : '你是发票结构化助手。输入是 PDF 原始文本，只返回符合指定 Schema 的 JSON。'
   const sourceDescription = isOcrSource
     ? '腾讯 OCR 结构化 JSON'
     : 'PDF 原始文本'
   const sourceRules = isOcrSource
-    ? `OCR 输入中的字段可能带有 name、value 和 row。商品明细优先使用字段名称和相同 row 关联，不能将不同 row 的数值拼成一条商品明细。`
+    ? `OCR 的 data 是已结构化字段，优先级高于 fields；fields 仅可按字段名称和相同 row 补充，不能跨行组合。当 subType 为 VatElectronicInvoiceFull 时，必须直接映射：invoiceNumber=data.Number，invoiceDate=data.Date，sellerName=data.Seller，sellerTaxId=data.SellerTaxID，totalAmount=data.Total，taxAmount=data.Tax，amountWithoutTax=data.PretaxAmount；items 必须逐项映射 data.VatElectronicItems，itemName=Name，quantity=Quantity，unitPrice=Price，amount=Total。`
     : `PDF 文本中的表格列可能被拆散或错序。必须依据表头和同一商品行确认列归属，不能仅根据相邻数字猜测字段。`
   const extractionRules = [
-    '所有能可靠识别的字段必须填写；仅在原始输入确实不存在或无法可靠确认时填写 null。',
-    '金额和数量字段必须以十进制字符串输出，不得输出 JSON 数字。尤其 unitPrice 必须保留原始精度，例如 "0.9424778761062"。',
-    '每一条 items 必须只对应原始发票中的同一商品行，itemName、quantity、unitPrice、amount 不得跨行组合。',
-    'quantity 只能取“数量”列；unitPrice 只能取“单价”列；amount 只能取该商品行的“金额”或“不含税金额”列。',
-    'taxAmount 只能取发票或商品行的“税额”列，taxAmount、税率、金额均不得填入 unitPrice。',
-    'amountWithoutTax 只能取发票合计栏的“不含税金额”；totalAmount 只能取“价税合计”。',
-    '不得通过数量、金额、税率或税额反推单价；不得自行计算、修正或补造 quantity、unitPrice、amount。无法可靠确认时返回 null。',
+    '仅提取输入中明确存在的值；无法可靠确认时返回 null，不得编造、计算、修正或补全。',
+    '金额和数量必须是十进制字符串；unitPrice 必须保留原始精度，例如 "0.9424778761062"。',
+    '每个 items 元素只能对应同一商品行，itemName、quantity、unitPrice、amount 不得跨行组合。',
+    'quantity 只能取数量字段；unitPrice 只能取单价字段；amount 只能取该商品行金额或不含税金额。',
+    '税额、税率、商品金额和价税合计均不得填入 unitPrice；不得通过数量、金额、税率或税额反推单价。',
+    'amountWithoutTax 只能取发票合计的不含税金额；totalAmount 只能取价税合计。',
   ].join('\n- ')
 
   return [
