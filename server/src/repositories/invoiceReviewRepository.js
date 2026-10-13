@@ -613,7 +613,8 @@ async function hasActiveDuplicateClearDecision({
   connection = pool,
   invoiceId,
   duplicateInvoiceId,
-  invoiceUpdatedAt,
+  sellerTaxId,
+  invoiceNumber,
 }) {
   const [rows] = await connection.execute(
     `SELECT id
@@ -624,13 +625,19 @@ async function hasActiveDuplicateClearDecision({
        AND JSON_UNQUOTE(
          JSON_EXTRACT(after_data, '$.duplicateInvoiceId')
        ) = ?
-       AND created_at >= ?
+       AND JSON_UNQUOTE(
+         JSON_EXTRACT(after_data, '$.sellerTaxId')
+       ) = ?
+       AND JSON_UNQUOTE(
+         JSON_EXTRACT(after_data, '$.invoiceNumber')
+       ) = ?
      ORDER BY id DESC
      LIMIT 1`,
     [
       invoiceId,
       String(duplicateInvoiceId),
-      invoiceUpdatedAt,
+      sellerTaxId,
+      invoiceNumber,
     ],
   )
 

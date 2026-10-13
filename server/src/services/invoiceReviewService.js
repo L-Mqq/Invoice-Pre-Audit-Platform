@@ -1136,7 +1136,8 @@ async function submitInvoiceForReview({
         connection,
         invoiceId: normalizedInvoiceId,
         duplicateInvoiceId: duplicateInvoice.id,
-        invoiceUpdatedAt: invoice.updated_at,
+        sellerTaxId: invoice.seller_tax_id,
+        invoiceNumber: invoice.invoice_number,
       })
       : false
 
@@ -1582,6 +1583,8 @@ async function reviewInvoiceDuplicate({
       cumulativeWeekStart: result.cumulativeWeekStart,
       submittedAt: result.submittedAt || invoice.submitted_at,
       duplicateInvoiceId,
+      sellerTaxId: invoice.seller_tax_id,
+      invoiceNumber: invoice.invoice_number,
     }
 
     await invoiceReviewRepository.createQualificationReviewLog({

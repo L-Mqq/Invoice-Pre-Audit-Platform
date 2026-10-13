@@ -2,6 +2,9 @@ const assert = require('node:assert/strict')
 const {
   getCategoryDecision,
 } = require('../services/invoiceReviewService')
+const {
+  hasActiveDuplicateClearDecision,
+} = require('../repositories/invoiceReviewRepository')
 
 const cases = [
   {
@@ -39,7 +42,44 @@ const cases = [
   },
 ]
 
-function main() {
+async function testDuplicateClearSnapshotQuery() {
+  let executedSql = ''
+  let executedParameters = []
+  const connection = {
+    async execute(sql, parameters) {
+      executedSql = sql
+      executedParameters = parameters
+
+      return [[
+        {
+          id: 1,
+        },
+      ]]
+    },
+  }
+  const result = await hasActiveDuplicateClearDecision({
+    connection,
+    invoiceId: 395,
+    duplicateInvoiceId: 394,
+    sellerTaxId: '440300123456789',
+    invoiceNumber: '269520000037399910034',
+  })
+
+  assert.equal(result, true)
+  assert.match(executedSql, /\$\.sellerTaxId/)
+  assert.match(executedSql, /\$\.invoiceNumber/)
+  assert.doesNotMatch(executedSql, /created_at/)
+  assert.deepEqual(executedParameters, [
+    395,
+    '394',
+    '440300123456789',
+    '269520000037399910034',
+  ])
+
+  console.log('✅ 非重复确认按业务字段快照校验')
+}
+
+async function main() {
   for (const testCase of cases) {
     const result = getCategoryDecision(testCase.items)
 
@@ -49,7 +89,12 @@ function main() {
     console.log(`✅ ${testCase.name}`)
   }
 
-  console.log(`测试完成：${cases.length}/${cases.length} 通过`)
+  await testDuplicateClearSnapshotQuery()
+
+  console.log(`测试完成：${cases.length + 1}/${cases.length + 1} 通过`)
 }
 
-main()
+main().catch((error) => {
+  console.error(error)
+  process.exitCode = 1
+})
