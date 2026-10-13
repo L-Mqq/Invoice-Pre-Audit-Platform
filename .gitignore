@@ -1,0 +1,4 @@
+# Runtime invoice and voucher files contain sensitive business data.
+/storage/*
+!/storage/.gitkeep
+
