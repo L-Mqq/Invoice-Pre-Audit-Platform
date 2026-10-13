@@ -401,6 +401,41 @@ function getCategoryDecision(items) {
 
   return null
 }
+
+// 找出当前发票尚未人工确认非重复的第一张候选发票。
+async function findFirstUnclearedDuplicate({
+  connection,
+  invoice,
+  ignoredDuplicateInvoiceId = null,
+}) {
+  const duplicateInvoices = await invoiceRepository.findDuplicateInvoices({
+    connection,
+    invoiceId: invoice.id,
+    sellerTaxId: invoice.seller_tax_id,
+    invoiceNumber: invoice.invoice_number,
+    forUpdate: true,
+  })
+
+  for (const duplicateInvoice of duplicateInvoices) {
+    if (Number(duplicateInvoice.id) === Number(ignoredDuplicateInvoiceId)) {
+      continue
+    }
+
+    const hasActiveClearDecision = await invoiceReviewRepository.hasActiveDuplicateClearDecision({
+      connection,
+      invoiceId: invoice.id,
+      duplicateInvoiceId: duplicateInvoice.id,
+      sellerTaxId: invoice.seller_tax_id,
+      invoiceNumber: invoice.invoice_number,
+    })
+
+    if (!hasActiveClearDecision) {
+      return duplicateInvoice
+    }
+  }
+
+  return null
+}
 // 根据商品单价判断价格类型
 function getPriceDecision(items) {
   const results = items.map((item) => ({
@@ -979,12 +1014,9 @@ async function updateInvoiceManualData({
           ? 'category_confirmation'
           : null
       } else {
-        duplicateInvoice = await invoiceRepository.findDuplicateInvoice({
+        duplicateInvoice = await findFirstUnclearedDuplicate({
           connection,
-          invoiceId: normalizedInvoiceId,
-          sellerTaxId: updatedInvoice.seller_tax_id,
-          invoiceNumber: updatedInvoice.invoice_number,
-          forUpdate: true,
+          invoice: updatedInvoice,
         })
 
         if (duplicateInvoice) {
@@ -1123,25 +1155,12 @@ async function submitInvoiceForReview({
       )
     }
 
-    const duplicateInvoice = await invoiceRepository.findDuplicateInvoice({
+    const duplicateInvoice = await findFirstUnclearedDuplicate({
       connection,
-      invoiceId: normalizedInvoiceId,
-      sellerTaxId: invoice.seller_tax_id,
-      invoiceNumber: invoice.invoice_number,
-      forUpdate: true,
+      invoice,
     })
 
-    const hasActiveDuplicateClearDecision = duplicateInvoice
-      ? await invoiceReviewRepository.hasActiveDuplicateClearDecision({
-        connection,
-        invoiceId: normalizedInvoiceId,
-        duplicateInvoiceId: duplicateInvoice.id,
-        sellerTaxId: invoice.seller_tax_id,
-        invoiceNumber: invoice.invoice_number,
-      })
-      : false
-
-    if (duplicateInvoice && !hasActiveDuplicateClearDecision) {
+    if (duplicateInvoice) {
       const qualificationReason = buildSuspectedDuplicateReason({
         duplicateInvoiceId: duplicateInvoice.id,
       })
@@ -1521,46 +1540,63 @@ async function reviewInvoiceDuplicate({
         cumulativeWeekStart: invoice.cumulative_week_start,
         submittedAt: invoice.submitted_at,
       }
-    } else if (invoice.submitted_at) {
-      const items = await invoiceReviewRepository.findItemsForQualificationReview({
-        connection,
-        invoiceId: normalizedInvoiceId,
-      })
-      const manualProcessing = getManualProcessingContext({
-        invoice,
-        items,
-      })
-
-      if (manualProcessing.completionRequired) {
-        throw createHttpError(
-          409,
-          `资料待补全，不能继续预审：${getDataIssueReason(manualProcessing.dataIssues)}`,
-        )
-      }
-
-      result = await resolveApprovalDecision({
-        connection,
-        invoice,
-        items,
-        operatorId: normalizedOperatorId,
-      })
     } else {
-      const items = await invoiceReviewRepository.findItemsForQualificationReview({
+      const nextDuplicateInvoice = await findFirstUnclearedDuplicate({
         connection,
-        invoiceId: normalizedInvoiceId,
+        invoice,
+        ignoredDuplicateInvoiceId: duplicateInvoiceId,
       })
-      const categoryDecision = getCategoryDecision(items)
 
-      result = {
-        qualificationStatus: categoryDecision?.status || 'pending',
-        qualificationReason: categoryDecision?.reason || (
-          normalizedNote
-            ? `已确认非重复：${normalizedNote}；等待提交审核`
-            : '已确认非重复，等待提交审核'
-        ),
-        cumulativeAmount: null,
-        cumulativeWeekStart: null,
-        submittedAt: null,
+      if (nextDuplicateInvoice) {
+        result = {
+          qualificationStatus: 'pending_manual',
+          qualificationReason: buildSuspectedDuplicateReason({
+            duplicateInvoiceId: nextDuplicateInvoice.id,
+          }),
+          cumulativeAmount: invoice.cumulative_amount,
+          cumulativeWeekStart: invoice.cumulative_week_start,
+          submittedAt: invoice.submitted_at,
+        }
+      } else {
+        const items = await invoiceReviewRepository.findItemsForQualificationReview({
+          connection,
+          invoiceId: normalizedInvoiceId,
+        })
+
+        if (invoice.submitted_at) {
+          const manualProcessing = getManualProcessingContext({
+            invoice,
+            items,
+          })
+
+          if (manualProcessing.completionRequired) {
+            throw createHttpError(
+              409,
+              `资料待补全，不能继续预审：${getDataIssueReason(manualProcessing.dataIssues)}`,
+            )
+          }
+
+          result = await resolveApprovalDecision({
+            connection,
+            invoice,
+            items,
+            operatorId: normalizedOperatorId,
+          })
+        } else {
+          const categoryDecision = getCategoryDecision(items)
+
+          result = {
+            qualificationStatus: categoryDecision?.status || 'pending',
+            qualificationReason: categoryDecision?.reason || (
+              normalizedNote
+                ? `已确认非重复：${normalizedNote}；等待提交审核`
+                : '已确认非重复，等待提交审核'
+            ),
+            cumulativeAmount: null,
+            cumulativeWeekStart: null,
+            submittedAt: null,
+          }
+        }
       }
     }
 
@@ -1630,6 +1666,7 @@ function isSameDecimal(left, right) {
 }
 
 module.exports = {
+  findFirstUnclearedDuplicate,
   getCategoryDecision,
   reviewItemCategory,
   updateInvoiceManualData,

@@ -620,11 +620,21 @@ async function hasActiveDuplicateClearDecision({
     `SELECT id
      FROM operation_logs
      WHERE resource_type = 'invoice'
-       AND resource_id = ?
        AND operation_type = 'duplicate_cleared'
-       AND JSON_UNQUOTE(
-         JSON_EXTRACT(after_data, '$.duplicateInvoiceId')
-       ) = ?
+       AND (
+         (
+           resource_id = ?
+           AND JSON_UNQUOTE(
+             JSON_EXTRACT(after_data, '$.duplicateInvoiceId')
+           ) = ?
+         )
+         OR (
+           resource_id = ?
+           AND JSON_UNQUOTE(
+             JSON_EXTRACT(after_data, '$.duplicateInvoiceId')
+           ) = ?
+         )
+       )
        AND JSON_UNQUOTE(
          JSON_EXTRACT(after_data, '$.sellerTaxId')
        ) = ?
@@ -636,6 +646,8 @@ async function hasActiveDuplicateClearDecision({
     [
       invoiceId,
       String(duplicateInvoiceId),
+      duplicateInvoiceId,
+      String(invoiceId),
       sellerTaxId,
       invoiceNumber,
     ],

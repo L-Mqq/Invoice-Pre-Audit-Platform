@@ -59,8 +59,8 @@ async function createItems({ connection = pool, invoiceId, items }) {
   return createdItems
 }
 
-// 以销售方税号和发票号码进行基础重复检测；已取消记录不再作为有效重复依据。
-async function findDuplicateInvoice({
+// 以销售方税号和发票号码查询全部重复候选；已取消记录不再作为有效重复依据。
+async function findDuplicateInvoices({
   connection = pool,
   invoiceId,
   sellerTaxId,
@@ -68,7 +68,7 @@ async function findDuplicateInvoice({
   forUpdate = false,
 }) {
   if (!sellerTaxId || !invoiceNumber) {
-    return null
+    return []
   }
 
   const lockClause = forUpdate ? ' FOR UPDATE' : ''
@@ -85,8 +85,7 @@ async function findDuplicateInvoice({
        AND invoice_number = ?
        AND id <> ?
        AND qualification_status <> 'cancelled'
-     ORDER BY id ASC
-     LIMIT 1${lockClause}`,
+     ORDER BY id ASC${lockClause}`,
     [
       sellerTaxId,
       invoiceNumber,
@@ -94,7 +93,7 @@ async function findDuplicateInvoice({
     ],
   )
 
-  return rows[0] || null
+  return rows
 }
 
 async function markSuspectedDuplicate({
@@ -493,7 +492,7 @@ module.exports = {
   createDraft,
   updateExtractionResult,
   createItems,
-  findDuplicateInvoice,
+  findDuplicateInvoices,
   markSuspectedDuplicate,
   createOperationLog,
   findItemsByInvoiceIds,

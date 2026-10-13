@@ -153,13 +153,14 @@ async function createUploadBatch({ files, createdBy = null }) {
                 reason: priceJudgment.reason,
               })
 
-              const duplicateInvoice = await invoiceRepository.findDuplicateInvoice({
+              const duplicateInvoices = await invoiceRepository.findDuplicateInvoices({
                 connection: resultConnection,
                 invoiceId: storedFile.invoiceId,
                 sellerTaxId: extraction.structured.data.sellerTaxId,
                 invoiceNumber: extraction.structured.data.invoiceNumber,
                 forUpdate: true,
               })
+              const duplicateInvoice = duplicateInvoices[0] || null
 
               if (duplicateInvoice) {
                 const qualificationReason = buildSuspectedDuplicateReason({

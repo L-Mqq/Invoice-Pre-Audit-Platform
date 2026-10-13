@@ -1,10 +1,17 @@
 const assert = require('node:assert/strict')
 const {
+  findFirstUnclearedDuplicate,
   getCategoryDecision,
 } = require('../services/invoiceReviewService')
+const invoiceReviewRepository = require('../repositories/invoiceReviewRepository')
+const invoiceRepository = require('../repositories/invoiceRepository')
+
 const {
   hasActiveDuplicateClearDecision,
-} = require('../repositories/invoiceReviewRepository')
+} = invoiceReviewRepository
+const {
+  findDuplicateInvoices,
+} = invoiceRepository
 
 const cases = [
   {
@@ -72,11 +79,97 @@ async function testDuplicateClearSnapshotQuery() {
   assert.deepEqual(executedParameters, [
     395,
     '394',
+    394,
+    '395',
     '440300123456789',
     '269520000037399910034',
   ])
+  assert.match(executedSql, /\sOR\s/)
 
-  console.log('✅ 非重复确认按业务字段快照校验')
+  console.log('✅ 非重复确认按双向关系和业务字段快照校验')
+}
+
+async function testFindAllDuplicateCandidates() {
+  let executedSql = ''
+  const connection = {
+    async execute(sql) {
+      executedSql = sql
+
+      return [[
+        {
+          id: 394,
+        },
+        {
+          id: 395,
+        },
+        {
+          id: 396,
+        },
+      ]]
+    },
+  }
+  const results = await findDuplicateInvoices({
+    connection,
+    invoiceId: 397,
+    sellerTaxId: '440300123456789',
+    invoiceNumber: '269520000037399910034',
+  })
+
+  assert.deepEqual(
+    results.map((item) => item.id),
+    [
+      394,
+      395,
+      396,
+    ],
+  )
+  assert.doesNotMatch(executedSql, /LIMIT\s+1/i)
+  assert.match(executedSql, /ORDER BY id ASC/)
+
+  console.log('✅ 重复检测返回全部候选发票')
+}
+
+async function testFindNextUnclearedDuplicate() {
+  const originalFindDuplicateInvoices = invoiceRepository.findDuplicateInvoices
+  const originalHasActiveDuplicateClearDecision = invoiceReviewRepository.hasActiveDuplicateClearDecision
+
+  invoiceRepository.findDuplicateInvoices = async () => {
+    return [
+      {
+        id: 394,
+      },
+      {
+        id: 395,
+      },
+      {
+        id: 396,
+      },
+    ]
+  }
+  invoiceReviewRepository.hasActiveDuplicateClearDecision = async ({
+    duplicateInvoiceId,
+  }) => {
+    return duplicateInvoiceId === 394
+  }
+
+  try {
+    const result = await findFirstUnclearedDuplicate({
+      connection: {},
+      invoice: {
+        id: 397,
+        seller_tax_id: '440300123456789',
+        invoice_number: '269520000037399910034',
+      },
+      ignoredDuplicateInvoiceId: 395,
+    })
+
+    assert.equal(result?.id, 396)
+
+    console.log('✅ 确认一组非重复后自动推进到下一张候选发票')
+  } finally {
+    invoiceRepository.findDuplicateInvoices = originalFindDuplicateInvoices
+    invoiceReviewRepository.hasActiveDuplicateClearDecision = originalHasActiveDuplicateClearDecision
+  }
 }
 
 async function main() {
@@ -90,8 +183,10 @@ async function main() {
   }
 
   await testDuplicateClearSnapshotQuery()
+  await testFindAllDuplicateCandidates()
+  await testFindNextUnclearedDuplicate()
 
-  console.log(`测试完成：${cases.length + 1}/${cases.length + 1} 通过`)
+  console.log(`测试完成：${cases.length + 3}/${cases.length + 3} 通过`)
 }
 
 main().catch((error) => {
